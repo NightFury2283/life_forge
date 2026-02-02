@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"life_forge/internal/ai"
 	"life_forge/internal/handlers"
 	"life_forge/internal/storage"
 	"log"
@@ -33,10 +34,15 @@ func main() {
 
 	mux := http.NewServeMux()
 
+	ai_client := ai.NewGigaChatClient("your_key")
+	response, err := ai_client.Generate("Доброе утро, что ты хочешь на завтрак?")
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(response)
+
 	mux.HandleFunc("/entry", handler.HandleCreateEntry)
 	mux.HandleFunc("/entries", handler.HandleGetEntries)
-
-	fmt.Println(storage.GetEntries(ctx, 10))
 
 	if err := http.ListenAndServe(":8080", mux); err != nil {
 		log.Fatal("Fail Listen and Serve with error ", err)
