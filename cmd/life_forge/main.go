@@ -34,7 +34,7 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	ai_client := ai.NewGigaChatClient("MDE5YzFkYmMtYzQxMS03ZDk1LWE2YmQtOGVkY2MzZmY1ODAxOjAwOTMwZDEwLWI5ZmEtNDZiYS04Y2E3LTdjOWNjZDkzZDEzZQ==")
+	ai_client := ai.NewGigaChatClient("your_key")
 	response, err := ai_client.Generate("Доброе утро, что ты хочешь на завтрак?")
 	if err != nil {
 		fmt.Println(err)
