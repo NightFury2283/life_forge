@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"life_forge/internal/ai"
+	"life_forge/internal/config"
 	"life_forge/internal/handlers"
 	"life_forge/internal/storage"
 	"log"
@@ -12,11 +13,14 @@ import (
 )
 
 func main() {
-	dsn := "postgres://postgres:12345@localhost:5432/life_forge?sslmode=disable"
+	cfg := config.New()
+	if cfg.GigaChatKey == "" {
+		log.Fatal("Couldnt find Gigachad key")
+	}
 
 	ctx := context.Background()
 
-	pool, err := pgxpool.New(ctx, dsn)
+	pool, err := pgxpool.New(ctx, cfg.PostgresDSN)
 	if err != nil {
 		log.Fatal("unable to connect to bd", err)
 	}
@@ -34,7 +38,7 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	ai_client := ai.NewGigaChatClient("your_key")
+	ai_client := ai.NewGigaChatClient(cfg.GigaChatKey)
 	response, err := ai_client.Generate("Доброе утро, что ты хочешь на завтрак?")
 	if err != nil {
 		fmt.Println(err)
