@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"life_forge/internal/handlers"
+	"life_forge/internal/storage"
 	"log"
-
+	"net/http"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -23,4 +26,19 @@ func main() {
 	}
 
 	log.Println("connected to db successfully")
+
+	storage := storage.NewJournalStorage(pool)
+
+	handler := handlers.NewJournalHandler(storage)
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/entry", handler.HandleCreateEntry)
+	mux.HandleFunc("/entries", handler.HandleGetEntries)
+
+	fmt.Println(storage.GetEntries(ctx, 10))
+
+	if err := http.ListenAndServe(":8080", mux); err != nil {
+		log.Fatal("Fail Listen and Serve with error ", err)
+	}
 }
