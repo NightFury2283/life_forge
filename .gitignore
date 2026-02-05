@@ -21,3 +21,7 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# google calendar
+credentials.json
+token.json
