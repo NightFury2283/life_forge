@@ -40,7 +40,7 @@ func (db_ct *ContextStorage) GetContextByID(ctx context.Context, id int) (models
 
 	if err != nil {
 		log.Println("Error with QueryRow method in ", op, " with error: ", err)
-		return models.Context{}, err
+		return models.Context{}, nil
 	}
 
 	context.Goals = []string{}

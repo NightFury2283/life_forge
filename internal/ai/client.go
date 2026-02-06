@@ -81,7 +81,7 @@ func (gg_cl *GigaChatClient) Generate(prompt string) (string, error) {
 	}
 
 	reqBody := GigaChatRequest{
-		Model:    "GigaChat",
+		Model:    "GigaChat-Pro",
 		Messages: []Message{{Role: "user", Content: prompt}},
 		Stream:   false,
 	}
