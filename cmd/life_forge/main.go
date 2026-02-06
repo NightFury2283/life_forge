@@ -38,7 +38,6 @@ func main() {
 	calendarStorage, err := storage.NewGoogleCalendarStorage()
 	log.Printf("🔄 Calendar status: authorized=%v, error=%v", calendarStorage.IsAuthorized(), err)
 
-	// ✅ ТЕСТ КАЛЕНДАРЯ ПРЯМО В ЛОГЕ
 	if calendarStorage.IsAuthorized() {
 		events, _ := calendarStorage.ListEvents(1)
 		log.Printf("📅 Calendar events found: %d", len(events))

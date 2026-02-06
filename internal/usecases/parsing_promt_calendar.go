@@ -8,38 +8,34 @@ import (
 	"time"
 )
 
-const CALENDAR_SEPARATOR = "|||CALENDAR_EVENT|||" // Разделитель ответа ИИ
+const CALENDAR_SEPARATOR = "|||CALENDAR_EVENT|||"
 
 func ParseCalendarAIResponse(response string) (string, []*models.EventRequest, error) {
-	// Если нет разделителя — обычный текст
+
 	if !strings.Contains(response, CALENDAR_SEPARATOR) {
 		return strings.TrimSpace(response), nil, nil
 	}
 
-	// Разбиваем ответ ИИ на части
 	parts := strings.SplitN(response, CALENDAR_SEPARATOR, 3)
 	if len(parts) < 2 {
 		return strings.TrimSpace(parts[0]), nil, fmt.Errorf("некорректный формат ответа, отправьте запрос ещё раз")
 	}
 
-	// Очищаем ответ пользователю
 	userAnswer := strings.TrimSpace(parts[0])
 	userAnswer = strings.TrimPrefix(userAnswer, "Ответ:")
 	userAnswer = strings.TrimSpace(userAnswer)
 
-	// ✅ ИСПРАВЛЕНИЕ: правильно извлекаем JSON без лишнего текста
 	jsonText := strings.TrimSpace(parts[1])
 	jsonParts := strings.SplitN(jsonText, CALENDAR_SEPARATOR, 2)
 	jsonText = strings.TrimSpace(jsonParts[0])
 	jsonText = strings.Trim(jsonText, " {}[]\t\n\r")
 
 	if jsonText == "" || jsonText == "{}" {
-		return userAnswer, nil, nil // Пустой JSON = нет событий
+		return userAnswer, nil, nil
 	}
 
 	fmt.Println("Ответ ИИ перед парсингом Json: \n\n", response)
 
-	// ✅ ИСПРАВЛЕНИЕ: убираем проверку isValidJSON — она ломает null значения
 	events, err := parseCalendarJSON(jsonText)
 	if err != nil {
 		return userAnswer, nil, fmt.Errorf("ошибка парсинга JSON: %w", err)
@@ -49,7 +45,7 @@ func ParseCalendarAIResponse(response string) (string, []*models.EventRequest, e
 }
 
 func parseCalendarJSON(jsonText string) ([]*models.EventRequest, error) {
-	// Массив или одиночный объект?
+
 	if strings.HasPrefix(jsonText, "[") {
 		return parseJSONArray(jsonText)
 	}
@@ -66,7 +62,6 @@ func parseJSONArray(jsonText string) ([]*models.EventRequest, error) {
 		Description *string  `json:"description"`
 	}
 
-	// ✅ Проверяем валидность JSON массива
 	if err := json.Unmarshal([]byte(jsonText), &tempEvents); err != nil {
 		return nil, fmt.Errorf("неверный JSON массив: %w", err)
 	}
@@ -74,7 +69,7 @@ func parseJSONArray(jsonText string) ([]*models.EventRequest, error) {
 	var events []*models.EventRequest
 	for _, tempEvent := range tempEvents {
 		if !tempEvent.IsEvent {
-			continue // Пропускаем не-события
+			continue
 		}
 
 		event := &models.EventRequest{
@@ -85,7 +80,6 @@ func parseJSONArray(jsonText string) ([]*models.EventRequest, error) {
 			Description:   tempEvent.Description,
 		}
 
-		// ✅ Безопасный парсинг времени
 		if tempEvent.StartTime != nil && *tempEvent.StartTime != "" {
 			parsedTime, err := time.Parse(time.RFC3339, *tempEvent.StartTime)
 			if err != nil {
@@ -113,13 +107,12 @@ func parseSingleEvent(jsonText string) ([]*models.EventRequest, error) {
 		Description *string  `json:"description"`
 	}
 
-	// ✅ Проверяем валидность одиночного JSON
 	if err := json.Unmarshal([]byte(jsonText), &tempEvent); err != nil {
 		return nil, fmt.Errorf("неверный JSON объект: %w \n%s", err, jsonText)
 	}
 
 	if !tempEvent.IsEvent {
-		return nil, nil // Не событие
+		return nil, nil
 	}
 
 	event := &models.EventRequest{
@@ -130,7 +123,6 @@ func parseSingleEvent(jsonText string) ([]*models.EventRequest, error) {
 		Description:   tempEvent.Description,
 	}
 
-	// ✅ Безопасный парсинг времени
 	if tempEvent.StartTime != nil && *tempEvent.StartTime != "" {
 		parsedTime, err := time.Parse(time.RFC3339, *tempEvent.StartTime)
 		if err != nil {
