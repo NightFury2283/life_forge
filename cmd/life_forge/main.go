@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"life_forge/internal/ai"
 	"life_forge/internal/config"
 	"life_forge/internal/handlers"
@@ -9,8 +10,6 @@ import (
 	"life_forge/internal/storage"
 	"log"
 	"net/http"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -34,12 +33,31 @@ func main() {
 
 	log.Println("connected to db successfully")
 
-	storage := storage.NewContextStorage(pool)
+	contextStorage := storage.NewContextStorage(pool)
 
-	chatHandler := handlers.NewChatHandler(storage, ai_client)
+	calendarStorage, err := storage.NewGoogleCalendarStorage()
+	log.Printf("🔄 Calendar status: authorized=%v, error=%v", calendarStorage.IsAuthorized(), err)
+
+	// ✅ ТЕСТ КАЛЕНДАРЯ ПРЯМО В ЛОГЕ
+	if calendarStorage.IsAuthorized() {
+		events, _ := calendarStorage.ListEvents(1)
+		log.Printf("📅 Calendar events found: %d", len(events))
+	} else {
+		log.Println("🔗 http://localhost:8080/auth/google")
+	}
+
+	if err != nil {
+		log.Fatal("Error to connect to Google Calendar", err)
+	}
+
+	chatHandler := handlers.NewChatHandler(contextStorage, ai_client, calendarStorage)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/chat", chatHandler.HandleChat)
+
+	authHandler := handlers.NewAuthHandler(calendarStorage)
+	mux.HandleFunc("/auth/google", authHandler.HandleGoogleLogin)
+	mux.HandleFunc("/auth/callback", authHandler.HandleGoogleCallback)
 
 	// Init storage context if needed
 	//initStorageContext(ctx, storage)

@@ -3,7 +3,7 @@ include .env
 DB_URL=${POSTGRES_DSN}
 
 migrate-up:
-	migrate -path ./migrations -database "$(DB_URL)" up
+	@migrate -path ./migrations -database "$(DB_URL)" up
 go:
 	@go run cmd/life_forge/main.go
 

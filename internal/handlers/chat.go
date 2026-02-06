@@ -13,19 +13,21 @@ import (
 )
 
 type ChatHandler struct {
-	contextStorage *storage.ContextStorage
-	aiClient       *ai.GigaChatClient
+	contextStorage  *storage.ContextStorage
+	aiClient        *ai.GigaChatClient
+	calendarStorage *storage.GoogleCalendarStorage
 }
 
-func NewChatHandler(contextStorage *storage.ContextStorage, aiClient *ai.GigaChatClient) *ChatHandler {
+func NewChatHandler(contextStorage *storage.ContextStorage, aiClient *ai.GigaChatClient, calendarStorage *storage.GoogleCalendarStorage) *ChatHandler {
 	return &ChatHandler{
-		contextStorage: contextStorage,
-		aiClient:       aiClient,
+		contextStorage:  contextStorage,
+		aiClient:        aiClient,
+		calendarStorage: calendarStorage,
 	}
 }
 
 func (ch *ChatHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
-	op := "handlers.HandleChat"
+	op := "handlers.chat.go HandleChat"
 
 	//check method
 	if r.Method != http.MethodPost {
@@ -55,9 +57,9 @@ func (ch *ChatHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 	//promt_db send request to ai to get answer for user and updates for db
 
 	//calendar
-	
-	// TODO: add calendar. Load real calendar data from storage
-	calendarData := ch.contextStorage.GetCalendarPreview(r.Context())
+
+	//show next 5 days of Calendar to AI
+	calendarData := ch.calendarStorage.GetCalendarPreview(5)
 
 	promt_calendar := fmt.Sprintf("%s\n%s ", storage.PROMT_CALENDAR, calendarData)
 
@@ -68,12 +70,17 @@ func (ch *ChatHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: use events _ for google calendar integration
-	user_answer_calendar, _, err := usecases.ParseCalendarAIResponse(response)
+	temp_response_calendar := response
+
+	user_answer_calendar, events, err := usecases.ParseCalendarAIResponse(response)
 	if err != nil {
 		log.Printf("%s: parse calendar response error: %v", op, err)
 		http.Error(w, "AI response parsing error", http.StatusInternalServerError)
 		return
+	}
+
+	for _, event := range events {
+		ch.calendarStorage.CreateEvent(*event)
 	}
 
 	prompt_db := fmt.Sprintf("%s\n\nЦели: %s\nНедавние действия: %s\nПрогресс: %v\nКалендарь: %s\n\nЗапрос пользователя:\n%s",
@@ -105,7 +112,9 @@ func (ch *ChatHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 	answ := user_answer_calendar + "\n\n" + userAnswer
 
 	if err := json.NewEncoder(w).Encode(map[string]string{
-		"response": answ,
+		//TODO: delete calendar response
+		"response_calendar": temp_response_calendar,
+		"response":          answ,
 		//TODO: delete full response from answer to user. It is only for debug now
 		"full_response": response,
 	}); err != nil {

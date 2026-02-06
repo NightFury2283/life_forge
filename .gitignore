@@ -24,4 +24,7 @@ logs/
 
 # google calendar
 credentials.json
+credentials*.json
 token.json
+client_secret_*.json
+client_secret_*.apps.googleusercontent.com.json
