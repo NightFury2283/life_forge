@@ -52,11 +52,18 @@ func main() {
 	chatHandler := handlers.NewChatHandler(contextStorage, ai_client, calendarStorage)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/chat", chatHandler.HandleChat)
 
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "static/index.html")
+	})
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+
+	mux.HandleFunc("/chat", chatHandler.HandleChat)
 	authHandler := handlers.NewAuthHandler(calendarStorage)
 	mux.HandleFunc("/auth/google", authHandler.HandleGoogleLogin)
 	mux.HandleFunc("/auth/callback", authHandler.HandleGoogleCallback)
+
+	// ------------------------------------------
 
 	// Init storage context if needed
 	//initStorageContext(ctx, storage)
