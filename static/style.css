@@ -1,0 +1,49 @@
+/* Resizable Split Pane */
+.resizable {
+    resize: horizontal;
+    overflow: auto;
+}
+
+#chat-panel:hover,
+#calendar-panel:hover {
+    cursor: col-resize;
+}
+
+/* Scrollbar */
+#messages::-webkit-scrollbar,
+#calendar-events::-webkit-scrollbar {
+    width: 6px;
+}
+
+#messages::-webkit-scrollbar-track,
+#calendar-events::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+
+#messages::-webkit-scrollbar-thumb,
+#calendar-events::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+
+/* Анимации */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-slide-in {
+    animation: slideIn 0.3s ease-out;
+}
+
+/* Hover эффекты */
+button:hover {
+    transform: scale(1.05);
+}

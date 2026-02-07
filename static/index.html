@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LifeForge — Чат + Календарь</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 h-screen overflow-hidden">
+    <div class="flex h-screen">
+        <!-- ЧАТ (левая панель) -->
+        <div id="chat-panel" class="w-1/2 bg-white shadow-2xl border-r border-gray-200 flex flex-col resizable">
+            <div class="p-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+                <h1 class="text-2xl font-bold">🤖 LifeForge AI</h1>
+                <p class="text-blue-100">Авторизуйся: <a href="/auth/google" class="underline">Google Calendar</a></p>
+            </div>
+
+            <!-- Сообщения -->
+            <div id="messages" class="flex-1 p-6 overflow-y-auto space-y-4 bg-gray-50">
+                <div class="text-center text-gray-500 py-8">Начни чат!</div>
+            </div>
+
+            <!-- Input -->
+            <div class="p-6 bg-white border-t border-gray-200">
+                <div class="flex gap-2">
+                    <!-- HTMX отправляет message=... (form-urlencoded) -->
+                    <input id="message-input" type="text" name="message" placeholder="Напиши сообщение..."
+                        class="flex-1 p-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        hx-post="/chat" hx-trigger="keyup[key=='Enter'] from:body" hx-target="#messages"
+                        hx-swap="beforeend">
+                    <button onclick="sendMessage()" type="button"
+                        class="p-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all">
+                        ➤
+                    </button>
+                </div>
+                <div class="text-xs text-gray-500 mt-2 text-center">
+                    /clear-chat | /calendar
+                </div>
+            </div>
+        </div>
+
+        <!-- calendar-panel -->
+        <div id="calendar-panel" class="w-1/2 shadow-2xl resizable">
+            <div class="p-6 bg-gradient-to-r from-emerald-600 to-teal-600 text-white sticky top-0 z-10">
+                <h2 class="text-xl font-bold">📅 Google Calendar</h2>
+                <button onclick="toggleCalendarSize()"
+                    class="absolute top-6 right-6 px-3 py-1 bg-white/20 rounded-full hover:bg-white/30">
+                    ↔
+                </button>
+            </div>
+            <!-- Google Calendar iframe -->
+            <iframe id="google-calendar"
+                src="https://calendar.google.com/calendar/embed?src=alexklinniy@gmail.com&ctz=Europe%2FMoscow"
+                class="w-full h-full border-0" style="min-height: 600px;" allowfullscreen scrolling="no">
+            </iframe>
+        </div>
+
+    </div>
+
+    <script src="/static/chat.js"></script>
+</body>
+
+</html>
