@@ -67,17 +67,16 @@ func (ch *ChatHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//current curr_context
-	curr_context, err := ch.contextStorage.GetContextByID(r.Context(), 1)
-	if err != nil {
-		log.Printf("%s: get context error: %v", op, err)
-		http.Error(w, "Internal error", http.StatusInternalServerError)
-		return
-	}
+	/*
+		curr_context, err := ch.contextStorage.GetContextByID(r.Context(), 1)
+		if err != nil {
+			log.Printf("%s: get context error: %v", op, err)
+			http.Error(w, "Internal error", http.StatusInternalServerError)
+			return
+		}
+	*/
 
-	//Two steps. Promt for calendar if needed, then promt for db update and answer to user
-
-	//promt_calendar send request to ai to check if user wants to create calendar event
-	//promt_db send request to ai to get answer for user and updates for db
+	//one step. Promt for calendar (send future 5 days of calendar), receive new events and answer to user.
 
 	//calendar
 
@@ -103,30 +102,31 @@ func (ch *ChatHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 	for _, event := range events {
 		ch.calendarStorage.CreateEvent(*event)
 	}
+	/*
+		prompt_db := fmt.Sprintf("%s\n\nЦели: %s\nНедавние действия: %s\nПрогресс: %v\nКалендарь: %s\n\nЗапрос пользователя:\n%s",
+			storage.PROMT_DB,
+			strings.Join(curr_context.Goals, ", "),
+			strings.Join(curr_context.Recent5, "; "),
+			curr_context.Progress,
+			calendarData,
+			message)
 
-	prompt_db := fmt.Sprintf("%s\n\nЦели: %s\nНедавние действия: %s\nПрогресс: %v\nКалендарь: %s\n\nЗапрос пользователя:\n%s",
-		storage.PROMT_DB,
-		strings.Join(curr_context.Goals, ", "),
-		strings.Join(curr_context.Recent5, "; "),
-		curr_context.Progress,
-		calendarData,
-		message)
+		response, err = makeRequestToAIGetResponse(ch, prompt_db)
+		if err != nil {
+			log.Printf("%s: AI DB error: %v", op, err)
+			http.Error(w, "AI service error", http.StatusInternalServerError)
+			return
+		}
 
-	response, err = makeRequestToAIGetResponse(ch, prompt_db)
-	if err != nil {
-		log.Printf("%s: AI DB error: %v", op, err)
-		http.Error(w, "AI service error", http.StatusInternalServerError)
-		return
-	}
+		userAnswer, aiUpdates := usecases.ParseAIResponse(response)
 
-	userAnswer, aiUpdates := usecases.ParseAIResponse(response)
+		// add updates to old context in db
+		mergedContext := mergeContexts(curr_context, aiUpdates)
 
-	// add updates to old context in db
-	mergedContext := mergeContexts(curr_context, aiUpdates)
-
-	if err := ch.contextStorage.SaveContext(r.Context(), &mergedContext); err != nil {
-		log.Printf("%s: save context error: %v", op, err)
-	}
+		if err := ch.contextStorage.SaveContext(r.Context(), &mergedContext); err != nil {
+			log.Printf("%s: save context error: %v", op, err)
+		}
+	*/
 
 	// check htmx query - return html fragment
 	if r.Header.Get("HX-Request") != "" || r.Header.Get("HX-Trigger") != "" {
@@ -138,7 +138,7 @@ func (ch *ChatHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
                 <div>%s</div>
                 %s
             </div>`,
-			html.EscapeString(user_answer_calendar+"\n\n"+userAnswer),
+			html.EscapeString(user_answer_calendar+"\n"), //html.EscapeString(user_answer_calendar+"\n\n"+userAnswer),
 			formatEventsHTML(events))
 
 		fmt.Fprint(w, htmlResponse)
@@ -147,7 +147,7 @@ func (ch *ChatHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	answ := user_answer_calendar + "\n\n" + userAnswer
+	answ := user_answer_calendar
 
 	if err := json.NewEncoder(w).Encode(map[string]string{
 		//TODO: delete calendar response
