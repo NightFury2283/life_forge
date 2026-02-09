@@ -1,4 +1,3 @@
-/* Resizable Split Pane */
 .resizable {
     resize: horizontal;
     overflow: auto;
@@ -9,24 +8,19 @@
     cursor: col-resize;
 }
 
-/* Scrollbar */
-#messages::-webkit-scrollbar,
-#calendar-events::-webkit-scrollbar {
+#messages::-webkit-scrollbar {
     width: 6px;
 }
 
-#messages::-webkit-scrollbar-track,
-#calendar-events::-webkit-scrollbar-track {
+#messages::-webkit-scrollbar-track {
     background: #f1f5f9;
 }
 
-#messages::-webkit-scrollbar-thumb,
-#calendar-events::-webkit-scrollbar-thumb {
+#messages::-webkit-scrollbar-thumb {
     background: #cbd5e1;
     border-radius: 3px;
 }
 
-/* Анимации */
 @keyframes slideIn {
     from {
         opacity: 0;
@@ -43,7 +37,6 @@
     animation: slideIn 0.3s ease-out;
 }
 
-/* Hover эффекты */
 button:hover {
     transform: scale(1.05);
 }
