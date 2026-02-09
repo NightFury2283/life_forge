@@ -132,8 +132,12 @@ func (gcs *GoogleCalendarStorage) CreateEvent(event models.EventRequest) (*calen
 		},
 	}
 
-	if event.Recurrence != nil {
-		googleEvent.Recurrence = []string{fmt.Sprintf("RRULE:FREQ=%s", *event.Recurrence)}
+	if event.Recurrence != nil && *event.Recurrence != "" {
+		recurrenceRule := formatRecurrenceRule(*event.Recurrence)
+		if recurrenceRule != "" {
+			googleEvent.Recurrence = []string{recurrenceRule}
+			log.Printf("📅 Устанавливаем рекуррентность: %s", recurrenceRule)
+		}
 	}
 
 	if event.Description != nil {
@@ -141,6 +145,24 @@ func (gcs *GoogleCalendarStorage) CreateEvent(event models.EventRequest) (*calen
 	}
 
 	return gcs.service.Events.Insert("primary", googleEvent).Do()
+}
+
+func formatRecurrenceRule(recurrence string) string {
+	switch strings.ToUpper(recurrence) {
+	case "DAILY":
+		return "RRULE:FREQ=DAILY"
+	case "WEEKLY":
+		return "RRULE:FREQ=WEEKLY"
+	case "MONTHLY":
+		return "RRULE:FREQ=MONTHLY"
+	case "YEARLY":
+		return "RRULE:FREQ=YEARLY"
+	default:
+		if strings.HasPrefix(strings.ToUpper(recurrence), "RRULE:") {
+			return recurrence
+		}
+		return fmt.Sprintf("RRULE:FREQ=%s", strings.ToUpper(recurrence))
+	}
 }
 
 func (gcs *GoogleCalendarStorage) SaveEvent(ctx context.Context, event *models.EventRequest) error {
