@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"html"
+	"io"
 	"life_forge/internal/ai"
 	"life_forge/internal/models"
 	"life_forge/internal/storage"
@@ -30,26 +32,38 @@ func NewChatHandler(contextStorage *storage.ContextStorage, aiClient *ai.GigaCha
 func (ch *ChatHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 	op := "handlers.chat.go HandleChat"
 
-	//check method
+	log.Println("New request /chat")
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	//text from user - поддержка JSON и form-urlencoded для HTMX
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("%s: read body error: %v", op, err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	bodyReader := bytes.NewReader(bodyBytes)
+
 	var user_question struct{ Text string }
 	var message string
 
-	// Проверяем Content-Type для HTMX (form) и JS fetch (json)
-	if r.Header.Get("Content-Type") == "application/json" || strings.Contains(r.Header.Get("Content-Type"), "application/json") {
-		if err := json.NewDecoder(r.Body).Decode(&user_question); err != nil {
+	contentType := r.Header.Get("Content-Type")
+	log.Printf("Content-Type: %s", contentType)
+
+	if strings.Contains(contentType, "application/json") {
+		if err := json.NewDecoder(bodyReader).Decode(&user_question); err != nil {
 			log.Printf("%s: decode json error: %v", op, err)
-			http.Error(w, "Bad request", http.StatusBadRequest)
+			http.Error(w, `{"error": "Invalid JSON format"}`, http.StatusBadRequest)
 			return
 		}
 		message = user_question.Text
+		log.Printf("JSON decode succesfully: Text = '%s'", message)
 	} else {
-		// HTMX отправляет form-urlencoded
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 		if err := r.ParseForm(); err != nil {
 			log.Printf("%s: parse form error: %v", op, err)
 			http.Error(w, "Bad request", http.StatusBadRequest)
@@ -59,86 +73,65 @@ func (ch *ChatHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 		if message == "" {
 			message = r.FormValue("text")
 		}
+		log.Printf("Form decoded: message = '%s'", message)
 	}
 
 	if message == "" {
-		http.Error(w, "No message", http.StatusBadRequest)
+		log.Printf("%s: empty message", op)
+		http.Error(w, `{"error": "No message provided"}`, http.StatusBadRequest)
 		return
 	}
 
-	//current curr_context
-	curr_context, err := ch.contextStorage.GetContextByID(r.Context(), 1)
-	if err != nil {
-		log.Printf("%s: get context error: %v", op, err)
-		http.Error(w, "Internal error", http.StatusInternalServerError)
-		return
-	}
-
-	//Two steps. Promt for calendar if needed, then promt for db update and answer to user
-
-	//promt_calendar send request to ai to check if user wants to create calendar event
-	//promt_db send request to ai to get answer for user and updates for db
-
-	//calendar
-
-	//show next 5 days of Calendar to AI
 	calendarData := ch.calendarStorage.GetCalendarPreview(5)
+	log.Printf("📅 Calendar data: %d symbols", len(calendarData))
 
-	promt_calendar := fmt.Sprintf("%s\n%s ", storage.PROMT_CALENDAR, calendarData)
+	promt_calendar := fmt.Sprintf("%s\n%s \n запрос от пользователя:%s", storage.PROMT_CALENDAR, calendarData, message)
 
 	response, err := makeRequestToAIGetResponse(ch, promt_calendar)
 	if err != nil {
 		log.Printf("%s: AI calendar error: %v", op, err)
-		http.Error(w, "AI service error", http.StatusInternalServerError)
+		http.Error(w, `{"error": "AI service error"}`, http.StatusInternalServerError)
 		return
 	}
 
-	temp_response_calendar := response
+	log.Printf("Answer from AI: %d symbols", len(response))
 
 	user_answer_calendar, events, err := usecases.ParseCalendarAIResponse(response)
 	if err != nil {
 		log.Printf("%s: parse calendar response error: %v", op, err)
 	}
 
-	for _, event := range events {
-		ch.calendarStorage.CreateEvent(*event)
+	log.Printf("📋 Parsing events: %d events", len(events))
+	for i, event := range events {
+		if event.IsEvent && event.Title != "" {
+			log.Printf("Event %d: %s", i+1, event.Title)
+			createdEvent, err := ch.calendarStorage.CreateEvent(*event)
+			if err != nil {
+				log.Printf("❌ Error to create event '%s': %v", event.Title, err)
+			} else {
+				log.Printf("✅ Event created: %s (ID: %s)", event.Title, createdEvent.Id)
+			}
+
+			err = ch.calendarStorage.SaveEvent(r.Context(), event)
+			if err != nil {
+				log.Printf("❌ Error to save event in db '%s': %v", event.Title, err)
+			} else {
+				log.Printf("✅ Event saved in db: %s", event.Title)
+			}
+		}
 	}
 
-	prompt_db := fmt.Sprintf("%s\n\nЦели: %s\nНедавние действия: %s\nПрогресс: %v\nКалендарь: %s\n\nЗапрос пользователя:\n%s",
-		storage.PROMT_DB,
-		strings.Join(curr_context.Goals, ", "),
-		strings.Join(curr_context.Recent5, "; "),
-		curr_context.Progress,
-		calendarData,
-		message)
-
-	response, err = makeRequestToAIGetResponse(ch, prompt_db)
-	if err != nil {
-		log.Printf("%s: AI DB error: %v", op, err)
-		http.Error(w, "AI service error", http.StatusInternalServerError)
-		return
-	}
-
-	userAnswer, aiUpdates := usecases.ParseAIResponse(response)
-
-	// add updates to old context in db
-	mergedContext := mergeContexts(curr_context, aiUpdates)
-
-	if err := ch.contextStorage.SaveContext(r.Context(), &mergedContext); err != nil {
-		log.Printf("%s: save context error: %v", op, err)
-	}
-
-	// check htmx query - return html fragment
-	if r.Header.Get("HX-Request") != "" || r.Header.Get("HX-Trigger") != "" {
+	// ui
+	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 		htmlResponse := fmt.Sprintf(`
-            <div class="message p-4 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-xl max-w-3xl animate-slide-in mb-4">
-                <div class="mb-2 text-indigo-100">🤖 LifeForge AI</div>
-                <div>%s</div>
+            <div class="message p-4 rounded-2xl bg-gradient-to-r from-green-100 to-emerald-50 border border-green-200 max-w-3xl animate-slide-in mb-4">
+                <div class="mb-1 font-semibold text-green-800">🤖 LifeForge AI:</div>
+                <div class="text-gray-800">%s</div>
                 %s
             </div>`,
-			html.EscapeString(user_answer_calendar+"\n\n"+userAnswer),
+			html.EscapeString(user_answer_calendar),
 			formatEventsHTML(events))
 
 		fmt.Fprint(w, htmlResponse)
@@ -147,16 +140,22 @@ func (ch *ChatHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	answ := user_answer_calendar + "\n\n" + userAnswer
+	answ := user_answer_calendar
+	if answ == "" {
+		answ = "✅ Task completed!"
+	}
 
-	if err := json.NewEncoder(w).Encode(map[string]string{
-		//TODO: delete calendar response
-		"response_calendar": temp_response_calendar,
-		"response":          answ,
-		//TODO: delete full response from answer to user. It is only for debug now
-		"full_response": response,
-	}); err != nil {
+	responseData := map[string]interface{}{
+		"response":         answ,
+		"events_count":     len(events),
+		"calendar_preview": len(calendarData) > 50,
+		"status":           "success",
+	}
+
+	if err := json.NewEncoder(w).Encode(responseData); err != nil {
 		log.Printf("%s: encode response error: %v", op, err)
+		http.Error(w, `{"error": "Failed to encode response"}`, http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -185,7 +184,6 @@ func mergeContexts(oldContext, newUpdates models.Context) models.Context {
 
 func makeRequestToAIGetResponse(ch *ChatHandler, prompt string) (string, error) {
 	op := "handlers.makeRequestToAIGetResponse"
-	//get answer from ai
 	response, err := ch.aiClient.Generate(prompt)
 	if err != nil {
 		log.Printf("%s: AI error: %v", op, err)
@@ -194,30 +192,45 @@ func makeRequestToAIGetResponse(ch *ChatHandler, prompt string) (string, error) 
 	return response, nil
 }
 
-// show calendar events as nice HTML for UI
 func formatEventsHTML(events []*models.EventRequest) string {
 	if len(events) == 0 {
-		return ""
+		return `<div class="mt-2 text-xs text-green-600">✅ Calendar checked, dont need new events</div>`
 	}
 
 	var htmlEvents strings.Builder
-	htmlEvents.WriteString("<div class='mt-3 pt-3 border-t border-indigo-200 space-y-2'>")
-	htmlEvents.WriteString("<div class='text-xs font-semibold text-indigo-300 uppercase tracking-wide'>📅 Новые события:</div>")
+	htmlEvents.WriteString(`<div class="mt-3 pt-3 border-t border-green-200 space-y-2">`)
+	htmlEvents.WriteString(`<div class="text-sm font-semibold text-green-700">📅 Created events:</div>`)
 
-	for _, event := range events {
+	for i, event := range events {
+		if !event.IsEvent || event.Title == "" {
+			continue
+		}
+
 		title := html.EscapeString(event.Title)
-		timeStr := event.StartTime.Format("02.01 15:04")
+		timeStr := "сегодня"
+		if event.StartTime != nil {
+			timeStr = event.StartTime.Format("02.01 в 15:04")
+		}
+
 		duration := ""
 		if event.DurationHours != nil {
-			duration = fmt.Sprintf("%.1fч", *event.DurationHours)
+			hours := *event.DurationHours
+			if hours == 1 {
+				duration = "1 час"
+			} else if hours < 1 {
+				duration = fmt.Sprintf("%.0f минут", hours*60)
+			} else {
+				duration = fmt.Sprintf("%.1f часа", hours)
+			}
 		}
+
 		htmlEvents.WriteString(fmt.Sprintf(`
-            <div class="p-3 bg-white/30 backdrop-blur-sm rounded-xl border border-indigo-200 text-sm">
-                <div class="font-semibold">%s</div>
-                <div class="text-indigo-100">%s %s</div>
-            </div>`, title, timeStr, duration))
+            <div class="p-2 bg-green-50 rounded-lg border border-green-200">
+                <div class="font-medium text-green-800">%d. %s</div>
+                <div class="text-xs text-green-600">⏰ %s • %s</div>
+            </div>`, i+1, title, timeStr, duration))
 	}
 
-	htmlEvents.WriteString("</div>")
+	htmlEvents.WriteString(`</div>`)
 	return htmlEvents.String()
 }

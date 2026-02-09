@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/calendar/v3"
@@ -20,12 +21,10 @@ import (
 type GoogleCalendarStorage struct {
 	service *calendar.Service
 	config  *oauth2.Config
+	pool    *pgxpool.Pool
 }
 
-// NewGoogleCalendarStorage инициализирует клиент.
-// Если token.json есть - использует его.
-// Если нет - возвращает ошибку (надо пройти Auth Flow).
-func NewGoogleCalendarStorage() (*GoogleCalendarStorage, error) {
+func NewGoogleCalendarStorage(pool *pgxpool.Pool) (*GoogleCalendarStorage, error) {
 	data, err := os.ReadFile("credentials.json")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read credentials.json: %w", err)
@@ -36,12 +35,9 @@ func NewGoogleCalendarStorage() (*GoogleCalendarStorage, error) {
 		return nil, fmt.Errorf("failed to create config: %w", err)
 	}
 
-	// Пытаемся загрузить сохраненный токен
 	client, err := getClient(config)
 	if err != nil {
-		// Если токена нет, возвращаем объект, но без service
-		// Это нормально! Мы инициализируем service после Auth Flow
-		return &GoogleCalendarStorage{config: config}, nil
+		return &GoogleCalendarStorage{config: config, pool: pool}, nil
 	}
 
 	service, err := calendar.NewService(context.Background(), option.WithHTTPClient(client))
@@ -49,20 +45,19 @@ func NewGoogleCalendarStorage() (*GoogleCalendarStorage, error) {
 		return nil, fmt.Errorf("failed to create Calendar service: %w", err)
 	}
 
-	return &GoogleCalendarStorage{service: service, config: config}, nil
+	return &GoogleCalendarStorage{service: service, config: config, pool: pool}, nil
 }
 
-// IsAuthorized проверяет, есть ли валидный сервис
 func (gcs *GoogleCalendarStorage) IsAuthorized() bool {
 	return gcs.service != nil
 }
 
-// GetAuthURL возвращает ссылку для логина
+// GetAuthURL returns url for login
 func (gcs *GoogleCalendarStorage) GetAuthURL() string {
 	return gcs.config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 }
 
-// ExchangeCode меняет код от Google на токен и сохраняет его
+// ExchangeCode change code from Google on token and save it
 func (gcs *GoogleCalendarStorage) ExchangeCode(code string) error {
 	tok, err := gcs.config.Exchange(context.Background(), code)
 	if err != nil {
@@ -79,13 +74,13 @@ func (gcs *GoogleCalendarStorage) ExchangeCode(code string) error {
 	return nil
 }
 
-// Внутренние утилиты ==========================================
+//==========================================
 
 func getClient(config *oauth2.Config) (*http.Client, error) {
 	tokFile := "token.json"
 	tok, err := tokenFromFile(tokFile)
 	if err != nil {
-		return nil, err // Токена нет
+		return nil, err
 	}
 	return config.Client(context.Background(), tok), nil
 }
@@ -122,7 +117,6 @@ func (gcs *GoogleCalendarStorage) CreateEvent(event models.EventRequest) (*calen
 	if event.DurationHours != nil {
 		endTime = startTime.Add(time.Duration(*event.DurationHours * float64(time.Hour)))
 	} else {
-		// Default: 1 hour
 		endTime = startTime.Add(time.Hour)
 	}
 
@@ -138,8 +132,12 @@ func (gcs *GoogleCalendarStorage) CreateEvent(event models.EventRequest) (*calen
 		},
 	}
 
-	if event.Recurrence != nil {
-		googleEvent.Recurrence = []string{fmt.Sprintf("RRULE:FREQ=%s", *event.Recurrence)}
+	if event.Recurrence != nil && *event.Recurrence != "" {
+		recurrenceRule := formatRecurrenceRule(*event.Recurrence)
+		if recurrenceRule != "" {
+			googleEvent.Recurrence = []string{recurrenceRule}
+			log.Printf("📅 Устанавливаем рекуррентность: %s", recurrenceRule)
+		}
 	}
 
 	if event.Description != nil {
@@ -147,6 +145,48 @@ func (gcs *GoogleCalendarStorage) CreateEvent(event models.EventRequest) (*calen
 	}
 
 	return gcs.service.Events.Insert("primary", googleEvent).Do()
+}
+
+func formatRecurrenceRule(recurrence string) string {
+	switch strings.ToUpper(recurrence) {
+	case "DAILY":
+		return "RRULE:FREQ=DAILY"
+	case "WEEKLY":
+		return "RRULE:FREQ=WEEKLY"
+	case "MONTHLY":
+		return "RRULE:FREQ=MONTHLY"
+	case "YEARLY":
+		return "RRULE:FREQ=YEARLY"
+	default:
+		if strings.HasPrefix(strings.ToUpper(recurrence), "RRULE:") {
+			return recurrence
+		}
+		return fmt.Sprintf("RRULE:FREQ=%s", strings.ToUpper(recurrence))
+	}
+}
+
+func (gcs *GoogleCalendarStorage) SaveEvent(ctx context.Context, event *models.EventRequest) error {
+	op := "internal/storage/google_calendar.go SaveEvent"
+
+	sql_query := `
+	INSERT INTO events (is_event, title, start_time, duration_hours, recurrence, description) VALUES ($1, $2, $3, $4, $5, $6)
+	`
+
+	_, err := gcs.pool.Exec(ctx, sql_query,
+		event.IsEvent,
+		event.Title,
+		event.StartTime,
+		event.DurationHours,
+		event.Recurrence,
+		event.Description,
+	)
+
+	if err != nil {
+		log.Println("Error with Exec method in ", op, " with error: ", err)
+		return fmt.Errorf("%s: failed to save context data: %w", op, err)
+	}
+
+	return nil
 }
 
 func (gcs *GoogleCalendarStorage) ListEvents(days int) ([]*calendar.Event, error) {
@@ -173,15 +213,15 @@ func (gcs *GoogleCalendarStorage) ListEvents(days int) ([]*calendar.Event, error
 func (gcs *GoogleCalendarStorage) GetCalendarPreview(days int) string {
 	events, err := gcs.ListEvents(days)
 	if err != nil {
-		return fmt.Sprintf("Ошибка загрузки календаря: %v", err)
+		return fmt.Sprintf("Error to load calendar: %v", err)
 	}
 
 	if len(events) == 0 {
-		return "Нет запланированных событий"
+		return "No events"
 	}
 
 	var preview strings.Builder
-	preview.WriteString("Ближайшие события:\n")
+	preview.WriteString("Closest events:\n")
 
 	for _, event := range events {
 		start := event.Start.DateTime

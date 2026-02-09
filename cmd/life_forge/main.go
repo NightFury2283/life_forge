@@ -12,6 +12,21 @@ import (
 	"net/http"
 )
 
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, HX-Request")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	cfg := config.New()
 	if cfg.GigaChatKey == "" {
@@ -31,18 +46,16 @@ func main() {
 		log.Fatal("unable to ping db", err)
 	}
 
-	log.Println("connected to db successfully")
-
 	contextStorage := storage.NewContextStorage(pool)
 
-	calendarStorage, err := storage.NewGoogleCalendarStorage()
-	log.Printf("🔄 Calendar status: authorized=%v, error=%v", calendarStorage.IsAuthorized(), err)
+	calendarStorage, err := storage.NewGoogleCalendarStorage(pool)
+	log.Printf("Calendar status: authorized=%v, error=%v", calendarStorage.IsAuthorized(), err)
 
 	if calendarStorage.IsAuthorized() {
-		events, _ := calendarStorage.ListEvents(1)
+		events, _ := calendarStorage.ListEvents(5)
 		log.Printf("📅 Calendar events found: %d", len(events))
 	} else {
-		log.Println("🔗 http://localhost:8080/auth/google")
+		log.Println("Go by url: 🔗 http://localhost:8080/auth/google")
 	}
 
 	if err != nil {
@@ -63,15 +76,16 @@ func main() {
 	mux.HandleFunc("/auth/google", authHandler.HandleGoogleLogin)
 	mux.HandleFunc("/auth/callback", authHandler.HandleGoogleCallback)
 
-	// ------------------------------------------
-
 	// Init storage context if needed
 	//initStorageContext(ctx, storage)
 
 	//mux.HandleFunc("/entry", handler.HandleCreateEntry)
 	//mux.HandleFunc("/entries", handler.HandleGetEntries)
 
-	if err := http.ListenAndServe(":8080", mux); err != nil {
+	handler := corsMiddleware(mux)
+
+	log.Println("Server starting on http://localhost:8080")
+	if err := http.ListenAndServe(":8080", handler); err != nil {
 		log.Fatal("Fail Listen and Serve with error ", err)
 	}
 }
