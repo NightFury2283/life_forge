@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 type ChatHandler struct {
@@ -101,25 +102,8 @@ func (ch *ChatHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 		log.Printf("%s: parse calendar response error: %v", op, err)
 	}
 
-	log.Printf("📋 Parsing events: %d events", len(events))
-	for i, event := range events {
-		if event.IsEvent && event.Title != "" {
-			log.Printf("Event %d: %s", i+1, event.Title)
-			createdEvent, err := ch.calendarStorage.CreateEvent(*event)
-			if err != nil {
-				log.Printf("❌ Error to create event '%s': %v", event.Title, err)
-			} else {
-				log.Printf("✅ Event created: %s (ID: %s)", event.Title, createdEvent.Id)
-			}
-
-			err = ch.calendarStorage.SaveEvent(r.Context(), event)
-			if err != nil {
-				log.Printf("❌ Error to save event in db '%s': %v", event.Title, err)
-			} else {
-				log.Printf("✅ Event saved in db: %s", event.Title)
-			}
-		}
-	}
+	log.Printf("Parsing events: %d events", len(events))
+	saveEvents(ch, events, r)
 
 	// ui
 	if r.Header.Get("HX-Request") == "true" {
@@ -157,6 +141,42 @@ func (ch *ChatHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error": "Failed to encode response"}`, http.StatusInternalServerError)
 		return
 	}
+}
+
+func saveEvents(ch *ChatHandler, events []*models.EventRequest, r *http.Request) {
+	workers := make(chan struct{}, 5)
+	var wg sync.WaitGroup
+
+	for i, event := range events {
+
+		workers <- struct{}{}
+
+		wg.Add(1)
+		go func(event *models.EventRequest) {
+			defer func() {
+				<-workers
+				wg.Done()
+			}()
+			if event.IsEvent && event.Title != "" {
+				log.Printf("Event %d: %s", i+1, event.Title)
+				createdEvent, err := ch.calendarStorage.CreateEvent(*event)
+				if err != nil {
+					log.Printf("❌ Error to create event '%s': %v", event.Title, err)
+				} else {
+					log.Printf("✅ Event created: %s (ID: %s)", event.Title, createdEvent.Id)
+				}
+
+				err = ch.calendarStorage.SaveEvent(r.Context(), event)
+				if err != nil {
+					log.Printf("❌ Error to save event in db '%s': %v", event.Title, err)
+				} else {
+					log.Printf("✅ Event saved in db: %s", event.Title)
+				}
+			}
+		}(event)
+	}
+
+	wg.Wait()
 }
 
 func mergeContexts(oldContext, newUpdates models.Context) models.Context {
