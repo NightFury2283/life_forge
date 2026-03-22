@@ -31,11 +31,17 @@ type GigaChatResponse struct {
 }
 
 type GigaChatClient struct {
-	authKey string
+	AuthKey string
+	Token   Token
+}
+
+type Token struct {
+	Access_token string
+	Expires_at   time.Time
 }
 
 func NewGigaChatClient(authKey string) *GigaChatClient {
-	return &GigaChatClient{authKey: authKey}
+	return &GigaChatClient{AuthKey: authKey}
 }
 
 func (gg_cl *GigaChatClient) Generate(prompt string) (string, error) {
@@ -53,47 +59,11 @@ func (gg_cl *GigaChatClient) Generate(prompt string) (string, error) {
 	}
 	client := &http.Client{Transport: tr, Timeout: 60 * time.Second}
 
-	// get token
-	tokenForm := url.Values{}
-	tokenForm.Set("scope", "GIGACHAT_API_PERS")
-
-	tokenHttpReq, err := http.NewRequest("POST",
-		"https://ngw.devices.sberbank.ru:9443/api/v2/oauth",
-		strings.NewReader(tokenForm.Encode()))
-
+	//get token or exist
+	tokenData, err := gg_cl.getToken(client)
 	if err != nil {
-		log.Printf("Error to create token request: %v", err)
-		return "", fmt.Errorf("Token request create failed: %w", err)
+		return "", fmt.Errorf("error with getting token. doesnt exists & cant get. %w", err)
 	}
-
-	tokenHttpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	tokenHttpReq.Header.Set("RqUID", "123e4567-e89b-12d3-a456-426614174000")
-	tokenHttpReq.Header.Set("Authorization", "Basic "+gg_cl.authKey)
-
-	tokenResp, err := client.Do(tokenHttpReq)
-	if err != nil {
-		log.Printf("Error token request: %v", err)
-		return "", fmt.Errorf("token request failed: %w", err)
-	}
-	defer tokenResp.Body.Close()
-
-	if tokenResp.StatusCode != 200 {
-		body, _ := io.ReadAll(tokenResp.Body)
-		log.Printf("Token Error %d: %s", tokenResp.StatusCode, string(body))
-		return "", fmt.Errorf("Token http %d", tokenResp.StatusCode)
-	}
-
-	var tokenData struct {
-		AccessToken string `json:"access_token"`
-	}
-
-	if err := json.NewDecoder(tokenResp.Body).Decode(&tokenData); err != nil {
-		log.Printf("Token decode failed: %v", err)
-		return "", fmt.Errorf("Token decode failed: %w", err)
-	}
-
-	log.Printf("Get token succesfully")
-
 	//query to AI
 	reqBody := GigaChatRequest{
 		Model:    "GigaChat-Pro",
@@ -115,7 +85,7 @@ func (gg_cl *GigaChatClient) Generate(prompt string) (string, error) {
 		return "", fmt.Errorf("chat request create failed: %w", err)
 	}
 
-	chatHttpReq.Header.Set("Authorization", "Bearer "+tokenData.AccessToken)
+	chatHttpReq.Header.Set("Authorization", "Bearer "+tokenData)
 	chatHttpReq.Header.Set("Content-Type", "application/json")
 	chatHttpReq.Header.Set("RqUID", "123e4567-e89b-12d3-a456-426614174001")
 
@@ -149,4 +119,57 @@ func (gg_cl *GigaChatClient) Generate(prompt string) (string, error) {
 	responseText := chatResp.Choices[0].Message.Content
 
 	return responseText, nil
+}
+
+func (gg_cl *GigaChatClient) getToken(client *http.Client) (string, error) {
+	//check if token exist
+	if gg_cl.Token.Access_token != "" && time.Now().Before(gg_cl.Token.Expires_at) {
+		return gg_cl.Token.Access_token, nil
+	}
+
+	// get token
+	tokenForm := url.Values{}
+	tokenForm.Set("scope", "GIGACHAT_API_PERS")
+
+	tokenHttpReq, err := http.NewRequest("POST",
+		"https://ngw.devices.sberbank.ru:9443/api/v2/oauth",
+		strings.NewReader(tokenForm.Encode()))
+
+	if err != nil {
+		log.Printf("Error to create token request: %v", err)
+		return "", fmt.Errorf("Token request create failed: %w", err)
+	}
+
+	tokenHttpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	tokenHttpReq.Header.Set("RqUID", "123e4567-e89b-12d3-a456-426614174000")
+	tokenHttpReq.Header.Set("Authorization", "Basic "+gg_cl.AuthKey)
+
+	tokenResp, err := client.Do(tokenHttpReq)
+	if err != nil {
+		log.Printf("Error token request: %v", err)
+		return "", fmt.Errorf("token request failed: %w", err)
+	}
+	defer tokenResp.Body.Close()
+
+	if tokenResp.StatusCode != 200 {
+		body, _ := io.ReadAll(tokenResp.Body)
+		log.Printf("Token Error %d: %s", tokenResp.StatusCode, string(body))
+		return "", fmt.Errorf("Token http %d", tokenResp.StatusCode)
+	}
+
+	var tokenData struct {
+		AccessToken string `json:"access_token"`
+	}
+
+	if err := json.NewDecoder(tokenResp.Body).Decode(&tokenData); err != nil {
+		log.Printf("Token decode failed: %v", err)
+		return "", fmt.Errorf("Token decode failed: %w", err)
+	}
+
+	log.Printf("Get token succesfully")
+
+	gg_cl.Token.Access_token = tokenData.AccessToken
+	gg_cl.Token.Expires_at = time.Now().Add(29 * time.Minute)
+
+	return gg_cl.Token.Access_token, nil
 }
