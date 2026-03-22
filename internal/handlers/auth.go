@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"life_forge/internal/storage"
 	"net/http"
 )
@@ -34,5 +33,5 @@ func (h *AuthHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	fmt.Fprintf(w, "Авторизация успешна! Можете закрыть окно и вернуться в чат.")
+	http.Redirect(w, r, "http://localhost:8080", http.StatusPermanentRedirect)
 }

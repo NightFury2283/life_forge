@@ -12,6 +12,11 @@ import (
 	"net/http"
 )
 
+type Router struct {
+	chatHandler *handlers.ChatHandler
+	authHandler *handlers.AuthHandler
+}
+
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -49,10 +54,17 @@ func main() {
 	contextStorage := storage.NewContextStorage(pool)
 
 	calendarStorage, err := storage.NewGoogleCalendarStorage(pool)
-	log.Printf("Calendar status: authorized=%v, error=%v", calendarStorage.IsAuthorized(), err)
+	if err != nil {
+		log.Fatal("Error to connect to Google Calendar", err)
+	}
+	log.Printf("Calendar status: authorized=%v", calendarStorage.IsAuthorized())
 
+	//debug
 	if calendarStorage.IsAuthorized() {
-		events, _ := calendarStorage.ListEvents(5)
+		events, err := calendarStorage.ListEvents(5)
+		if err != nil {
+			log.Printf("Error listing events: %v", err)
+		}
 		log.Printf("📅 Calendar events found: %d", len(events))
 	} else {
 		log.Println("Go by url: 🔗 http://localhost:8080/auth/google")
@@ -63,24 +75,13 @@ func main() {
 	}
 
 	chatHandler := handlers.NewChatHandler(contextStorage, ai_client, calendarStorage)
+	authHandler := handlers.NewAuthHandler(calendarStorage)
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "static/index.html")
-	})
-	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+	router := newRouter(chatHandler, authHandler)
 
-	mux.HandleFunc("/chat", chatHandler.HandleChat)
-	authHandler := handlers.NewAuthHandler(calendarStorage)
-	mux.HandleFunc("/auth/google", authHandler.HandleGoogleLogin)
-	mux.HandleFunc("/auth/callback", authHandler.HandleGoogleCallback)
-
-	// Init storage context if needed
-	//initStorageContext(ctx, storage)
-
-	//mux.HandleFunc("/entry", handler.HandleCreateEntry)
-	//mux.HandleFunc("/entries", handler.HandleGetEntries)
+	router.register(mux)
 
 	handler := corsMiddleware(mux)
 
@@ -97,4 +98,31 @@ func initStorageContext(ctx context.Context, storageInstance *storage.ContextSto
 		Recent5:  []string{},
 		Progress: map[string]string{},
 	})
+}
+
+func newRouter(
+	chatHandler *handlers.ChatHandler,
+	authHandler *handlers.AuthHandler,
+) *Router {
+	return &Router{
+		chatHandler: chatHandler,
+		authHandler: authHandler,
+	}
+}
+
+func (r *Router) register(mux *http.ServeMux) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "static/index.html")
+	})
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+
+	mux.HandleFunc("/chat", r.chatHandler.HandleChat)
+	mux.HandleFunc("/auth/google", r.authHandler.HandleGoogleLogin)
+	mux.HandleFunc("/auth/callback", r.authHandler.HandleGoogleCallback)
+
+	// Init storage context if needed
+	//initStorageContext(ctx, storage)
+
+	//mux.HandleFunc("/entry", handler.HandleCreateEntry)
+	//mux.HandleFunc("/entries", handler.HandleGetEntries)
 }
