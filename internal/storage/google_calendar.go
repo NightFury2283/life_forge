@@ -54,7 +54,11 @@ func (gcs *GoogleCalendarStorage) IsAuthorized() bool {
 
 // GetAuthURL returns url for login
 func (gcs *GoogleCalendarStorage) GetAuthURL() string {
-	return gcs.config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
+	return gcs.config.AuthCodeURL(
+		"state-token",
+		oauth2.AccessTypeOffline,
+		oauth2.SetAuthURLParam("prompt", "consent"), // принудительный запрос согласия
+	)
 }
 
 // ExchangeCode change code from Google on token and save it

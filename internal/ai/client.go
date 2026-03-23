@@ -67,7 +67,7 @@ func (gg_cl *GigaChatClient) Generate(ctx context.Context, prompt string) (strin
 	}
 	//query to AI
 	reqBody := GigaChatRequest{
-		Model:    "GigaChat-Pro",
+		Model:    "GigaChat-Max",
 		Messages: []Message{{Role: "user", Content: prompt}},
 		Stream:   false,
 	}
