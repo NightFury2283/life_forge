@@ -2,6 +2,7 @@ package ai
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -44,7 +45,7 @@ func NewGigaChatClient(authKey string) *GigaChatClient {
 	return &GigaChatClient{AuthKey: authKey}
 }
 
-func (gg_cl *GigaChatClient) Generate(prompt string) (string, error) {
+func (gg_cl *GigaChatClient) Generate(ctx context.Context, prompt string) (string, error) {
 	log.Printf("Send message to AI, length: %d symbols", len(prompt))
 
 	// if len(prompt) > 500 {
@@ -60,7 +61,7 @@ func (gg_cl *GigaChatClient) Generate(prompt string) (string, error) {
 	client := &http.Client{Transport: tr, Timeout: 60 * time.Second}
 
 	//get token or exist
-	tokenData, err := gg_cl.getToken(client)
+	tokenData, err := gg_cl.getToken(ctx, client)
 	if err != nil {
 		return "", fmt.Errorf("error with getting token. doesnt exists & cant get. %w", err)
 	}
@@ -77,7 +78,7 @@ func (gg_cl *GigaChatClient) Generate(prompt string) (string, error) {
 		return "", fmt.Errorf("chat marshal failed: %w", err)
 	}
 
-	chatHttpReq, err := http.NewRequest("POST",
+	chatHttpReq, err := http.NewRequestWithContext(ctx, "POST",
 		"https://gigachat.devices.sberbank.ru/api/v1/chat/completions",
 		bytes.NewBuffer(jsonData))
 	if err != nil {
@@ -121,7 +122,7 @@ func (gg_cl *GigaChatClient) Generate(prompt string) (string, error) {
 	return responseText, nil
 }
 
-func (gg_cl *GigaChatClient) getToken(client *http.Client) (string, error) {
+func (gg_cl *GigaChatClient) getToken(ctx context.Context, client *http.Client) (string, error) {
 	//check if token exist
 	if gg_cl.Token.Access_token != "" && time.Now().Before(gg_cl.Token.Expires_at) {
 		return gg_cl.Token.Access_token, nil
@@ -131,7 +132,7 @@ func (gg_cl *GigaChatClient) getToken(client *http.Client) (string, error) {
 	tokenForm := url.Values{}
 	tokenForm.Set("scope", "GIGACHAT_API_PERS")
 
-	tokenHttpReq, err := http.NewRequest("POST",
+	tokenHttpReq, err := http.NewRequestWithContext(ctx, "POST",
 		"https://ngw.devices.sberbank.ru:9443/api/v2/oauth",
 		strings.NewReader(tokenForm.Encode()))
 

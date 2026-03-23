@@ -106,7 +106,7 @@ func saveToken(path string, token *oauth2.Token) {
 	json.NewEncoder(f).Encode(token)
 }
 
-func (gcs *GoogleCalendarStorage) CreateEvent(event models.EventRequest) (*calendar.Event, error) { //(*calendar.Event, error)
+func (gcs *GoogleCalendarStorage) CreateEvent(ctx context.Context, event models.EventRequest) (*calendar.Event, error) {
 	if event.StartTime == nil {
 		log.Println("start time is required")
 	}
@@ -144,7 +144,7 @@ func (gcs *GoogleCalendarStorage) CreateEvent(event models.EventRequest) (*calen
 		googleEvent.Description = *event.Description
 	}
 
-	return gcs.service.Events.Insert("primary", googleEvent).Do()
+	return gcs.service.Events.Insert("primary", googleEvent).Context(ctx).Do()
 }
 
 func formatRecurrenceRule(recurrence string) string {
@@ -189,7 +189,7 @@ func (gcs *GoogleCalendarStorage) SaveEvent(ctx context.Context, event *models.E
 	return nil
 }
 
-func (gcs *GoogleCalendarStorage) ListEvents(days int) ([]*calendar.Event, error) {
+func (gcs *GoogleCalendarStorage) ListEvents(ctx context.Context, days int) ([]*calendar.Event, error) {
 	if gcs.service == nil {
 		return nil, fmt.Errorf("Календарь не подключен. Перейдите по /auth/google для авторизации.")
 	}
@@ -201,6 +201,7 @@ func (gcs *GoogleCalendarStorage) ListEvents(days int) ([]*calendar.Event, error
 		TimeMax(timeMax).
 		SingleEvents(true).
 		OrderBy("startTime").
+		Context(ctx).
 		Do()
 
 	if err != nil {
@@ -210,8 +211,8 @@ func (gcs *GoogleCalendarStorage) ListEvents(days int) ([]*calendar.Event, error
 	return events.Items, nil
 }
 
-func (gcs *GoogleCalendarStorage) GetCalendarPreview(days int) string {
-	events, err := gcs.ListEvents(days)
+func (gcs *GoogleCalendarStorage) GetCalendarPreview(ctx context.Context, days int) string {
+	events, err := gcs.ListEvents(ctx, days)
 	if err != nil {
 		return fmt.Sprintf("Error to load calendar: %v", err)
 	}

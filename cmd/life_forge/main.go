@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"life_forge/internal/ai"
 	"life_forge/internal/config"
 	"life_forge/internal/handlers"
@@ -10,6 +9,11 @@ import (
 	"life_forge/internal/storage"
 	"log"
 	"net/http"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Router struct {
@@ -38,7 +42,9 @@ func main() {
 		log.Fatal("Couldnt find Gigachad key")
 	}
 
-	ctx := context.Background()
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer cancel()
+
 	ai_client := ai.NewGigaChatClient(cfg.GigaChatKey)
 
 	pool, err := pgxpool.New(ctx, cfg.PostgresDSN)
@@ -61,17 +67,13 @@ func main() {
 
 	//debug
 	if calendarStorage.IsAuthorized() {
-		events, err := calendarStorage.ListEvents(5)
+		events, err := calendarStorage.ListEvents(ctx, 5)
 		if err != nil {
 			log.Printf("Error listing events: %v", err)
 		}
 		log.Printf("📅 Calendar events found: %d", len(events))
 	} else {
 		log.Println("Go by url: 🔗 http://localhost:8080/auth/google")
-	}
-
-	if err != nil {
-		log.Fatal("Error to connect to Google Calendar", err)
 	}
 
 	chatHandler := handlers.NewChatHandler(contextStorage, ai_client, calendarStorage)
@@ -85,9 +87,27 @@ func main() {
 
 	handler := corsMiddleware(mux)
 
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: handler,
+	}
+
 	log.Println("Server starting on http://localhost:8080")
-	if err := http.ListenAndServe(":8080", handler); err != nil {
-		log.Fatal("Fail Listen and Serve with error ", err)
+	go func() {
+		if err := http.ListenAndServe(":8080", handler); err != nil && err != http.ErrServerClosed {
+			log.Fatal("Fail Listen and Serve with error ", err)
+		}
+	}()
+
+	<-ctx.Done()
+
+	log.Println("Shutting down server...")
+
+	shutdownCtx, stop := context.WithTimeout(context.Background(), 5*time.Second)
+	defer stop()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Println("Server cannot be stoped. error %w", err)
 	}
 }
 
