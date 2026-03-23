@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -13,7 +14,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"sync"
+	"time"
 )
 
 type ChatHandler struct {
@@ -83,12 +84,12 @@ func (ch *ChatHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	calendarData := ch.calendarStorage.GetCalendarPreview(5)
+	calendarData := ch.calendarStorage.GetCalendarPreview(r.Context(), 5)
 	log.Printf("📅 Calendar data: %d symbols", len(calendarData))
 
 	promt_calendar := fmt.Sprintf("%s\n%s \n запрос от пользователя:%s", storage.PROMT_CALENDAR, calendarData, message)
 
-	response, err := makeRequestToAIGetResponse(ch, promt_calendar)
+	response, err := makeRequestToAIGetResponse(r.Context(), ch, promt_calendar)
 	if err != nil {
 		log.Printf("%s: AI calendar error: %v", op, err)
 		http.Error(w, `{"error": "AI service error"}`, http.StatusInternalServerError)
@@ -145,28 +146,28 @@ func (ch *ChatHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 
 func saveEvents(ch *ChatHandler, events []*models.EventRequest, r *http.Request) {
 	workers := make(chan struct{}, 5)
-	var wg sync.WaitGroup
 
 	for i, event := range events {
 
 		workers <- struct{}{}
 
-		wg.Add(1)
 		go func(event *models.EventRequest) {
 			defer func() {
 				<-workers
-				wg.Done()
 			}()
 			if event.IsEvent && event.Title != "" {
 				log.Printf("Event %d: %s", i+1, event.Title)
-				createdEvent, err := ch.calendarStorage.CreateEvent(*event)
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+
+				createdEvent, err := ch.calendarStorage.CreateEvent(ctx, *event)
 				if err != nil {
 					log.Printf("❌ Error to create event '%s': %v", event.Title, err)
 				} else {
 					log.Printf("✅ Event created: %s (ID: %s)", event.Title, createdEvent.Id)
 				}
 
-				err = ch.calendarStorage.SaveEvent(r.Context(), event)
+				err = ch.calendarStorage.SaveEvent(ctx, event)
 				if err != nil {
 					log.Printf("❌ Error to save event in db '%s': %v", event.Title, err)
 				} else {
@@ -175,36 +176,34 @@ func saveEvents(ch *ChatHandler, events []*models.EventRequest, r *http.Request)
 			}
 		}(event)
 	}
-
-	wg.Wait()
 }
 
-func mergeContexts(oldContext, newUpdates models.Context) models.Context {
-	result := oldContext
+// func mergeContexts(oldContext, newUpdates models.Context) models.Context {
+// 	result := oldContext
 
-	if len(newUpdates.Goals) > 0 {
-		result.Goals = newUpdates.Goals
-	}
+// 	if len(newUpdates.Goals) > 0 {
+// 		result.Goals = newUpdates.Goals
+// 	}
 
-	if len(newUpdates.Recent5) > 0 {
-		result.Recent5 = newUpdates.Recent5
-	}
+// 	if len(newUpdates.Recent5) > 0 {
+// 		result.Recent5 = newUpdates.Recent5
+// 	}
 
-	if len(newUpdates.Progress) > 0 {
-		if result.Progress == nil {
-			result.Progress = make(map[string]string)
-		}
-		for k, v := range newUpdates.Progress {
-			result.Progress[k] = v
-		}
-	}
+// 	if len(newUpdates.Progress) > 0 {
+// 		if result.Progress == nil {
+// 			result.Progress = make(map[string]string)
+// 		}
+// 		for k, v := range newUpdates.Progress {
+// 			result.Progress[k] = v
+// 		}
+// 	}
 
-	return result
-}
+// 	return result
+// }
 
-func makeRequestToAIGetResponse(ch *ChatHandler, prompt string) (string, error) {
+func makeRequestToAIGetResponse(ctx context.Context, ch *ChatHandler, prompt string) (string, error) {
 	op := "handlers.makeRequestToAIGetResponse"
-	response, err := ch.aiClient.Generate(prompt)
+	response, err := ch.aiClient.Generate(ctx, prompt)
 	if err != nil {
 		log.Printf("%s: AI error: %v", op, err)
 		return "", err
