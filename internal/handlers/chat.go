@@ -87,7 +87,13 @@ func (ch *ChatHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 	calendarData := ch.calendarStorage.GetCalendarPreview(r.Context(), 5)
 	log.Printf("📅 Calendar data: %d symbols", len(calendarData))
 
-	promt_calendar := fmt.Sprintf("%s\n%s \n запрос от пользователя:%s", storage.PROMT_CALENDAR, calendarData, message)
+	now := time.Now()
+	timeContext := fmt.Sprintf("ВНИМАНИЕ! Сегодня: %s. Завтра: %s. Текущее время: %s. Все даты в JSON должны вычисляться относительно сегодня, используй часовой пояс +03:00 вместо Z!",
+		now.Format("2006-01-02"),
+		now.AddDate(0, 0, 1).Format("2006-01-02"),
+		now.Format("15:04"))
+	//запрос от пользователя (вместе с базовым промтом)
+	promt_calendar := fmt.Sprintf("%s\n%s \n запрос от пользователя:%s\n %s", storage.PROMT_CALENDAR, calendarData, message, timeContext)
 
 	response, err := makeRequestToAIGetResponse(r.Context(), ch, promt_calendar)
 	if err != nil {

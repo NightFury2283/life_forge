@@ -44,7 +44,7 @@ const (
 {
   "is_event": true,
   "title": "Название события",
-  "start_time": "2026-02-09T18:00:00Z",
+  "start_time": "2026-02-09T08:00:00+03:00",
   "duration": 1.5,
   "recurrence": "daily",
   "description": "Описание"
@@ -52,8 +52,8 @@ const (
 
 **Несколько событий:**
 [
-  {"is_event": true, "title": "Событие 1", "start_time": "2026-02-09T19:00:00Z", "duration": 2.0},
-  {"is_event": true, "title": "Событие 2", "start_time": "2026-02-09T21:00:00Z", "duration": 0.5}
+  {"is_event": true, "title": "Событие 1", "start_time": "2026-03-23T08:00:00+03:00", "duration": 2.0},
+  {"is_event": true, "title": "Событие 2", "start_time":"2026-01-19T08:00:00+03:00", "duration": 0.5}
 ]
 
 **Рекурренции:**
@@ -75,7 +75,7 @@ const (
 Убраться дома запланировано на сегодня 18:00!
 
 |||CALENDAR_EVENT|||
-{"is_event":true,"title":"Убраться дома","start_time":"2026-02-08T18:00:00Z","duration":1.0}
+{"is_event":true,"title":"Убраться дома","start_time":"2026-02-08T18:00:00+03:00","duration":1.0}
 |||CALENDAR_EVENT|||
 
 **Пример 2: ЯВНОЕ СОБЫТИЕ НА ЗАВТРА**
@@ -85,7 +85,7 @@ const (
 Встреча с клиентом запланирована на завтра в 14:00!
 
 |||CALENDAR_EVENT|||
-{"is_event":true,"title":"Встреча с клиентом","start_time":"2026-02-09T14:00:00Z","duration":1.0}
+{"is_event":true,"title":"Встреча с клиентом","start_time":"2026-02-09T14:00:00+03:00","duration":1.0}
 |||CALENDAR_EVENT|||
 
 **Пример 3: ДВА СОБЫТИЯ НА ЗАВТРА С РАЗНЫМ ВРЕМЕНЕМ**
@@ -96,8 +96,8 @@ const (
 
 |||CALENDAR_EVENT|||
 [
-  {"is_event":true,"title":"Тренировка","start_time":"2026-02-09T08:00:00Z","duration":1.5},
-  {"is_event":true,"title":"Учеба","start_time":"2026-02-09T18:00:00Z","duration":2.0}
+  {"is_event":true,"title":"Тренировка","start_time":"2026-02-09T08:00:00+03:00","duration":1.5},
+  {"is_event":true,"title":"Учеба","start_time":"2026-02-09T18:00:00+03:00","duration":2.0}
 ]
 |||CALENDAR_EVENT|||
 
@@ -109,8 +109,8 @@ const (
 
 |||CALENDAR_EVENT|||
 [
-  {"is_event":true,"title":"Поехать в Москву","start_time":"2026-02-09T08:00:00Z","duration":1.0},
-  {"is_event":true,"title":"Поесть в Макдональдсе","start_time":"2026-02-09T10:00:00Z","duration":1.0}
+  {"is_event":true,"title":"Поехать в Москву","start_time":"2026-02-09T08:00:00+03:00","duration":1.0},
+  {"is_event":true,"title":"Поесть в Макдональдсе","start_time":"2026-02-09T10:00:00+03:00","duration":1.0}
 ]
 |||CALENDAR_EVENT|||
 
