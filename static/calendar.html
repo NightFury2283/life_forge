@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gantt Chart - LifeForge</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .gantt-grid {
+            display: grid;
+            grid-template-columns: 250px repeat(14, 1fr);
+            gap: 1px;
+            background-color: #e5e7eb;
+            border: 1px solid #e5e7eb;
+        }
+        .gantt-header {
+            background-color: #f9fafb;
+            font-weight: 600;
+            color: #4b5563;
+            text-align: center;
+            padding: 12px 8px;
+            font-size: 0.875rem;
+        }
+        .gantt-cell {
+            background-color: #ffffff;
+            padding: 12px;
+            position: relative;
+        }
+        .task-row {
+            display: contents;
+        }
+        
+        .task-name {
+            background-color: #ffffff;
+            padding: 16px;
+            font-weight: 500;
+            color: #1f2937;
+            border-bottom: 1px solid #f3f4f6;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            z-index: 10;
+        }
+
+        .task-tracks {
+            grid-column: 2 / span 14;
+            display: grid;
+            grid-template-columns: repeat(14, 1fr);
+            gap: 1px;
+            background-color: #ffffff;
+            border-bottom: 1px solid #f3f4f6;
+            position: relative;
+            padding-top: 10px;
+            padding-bottom: 10px;
+        }
+        
+        .task-bar {
+            background: linear-gradient(90deg, #0ea5e9, #3b82f6);
+            border-radius: 6px;
+            height: 32px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            z-index: 5;
+            animation: slideInBar 0.5s ease-out forwards;
+            opacity: 0;
+            transform-origin: left;
+        }
+
+        .task-bar:hover {
+            transform: scaleY(1.1);
+            filter: brightness(1.1);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        .today-marker {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 250px; /* Start after task name column */
+            width: 2px;
+            background-color: #ef4444;
+            opacity: 0.5;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        @keyframes slideInBar {
+            from {
+                opacity: 0;
+                transform: scaleX(0);
+            }
+            to {
+                opacity: 1;
+                transform: scaleX(1);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen p-8 text-gray-800 font-sans">
+
+    <div class="max-w-7xl mx-auto">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900 bg-clip-text text-transparent bg-gradient-to-r from-teal-600 to-blue-600">
+                    Диаграмма Ганта
+                </h1>
+                <p class="text-gray-500 mt-2">Ближайшие задачи на 14 дней</p>
+            </div>
+            <button onclick="fetchGanttData()" class="px-5 py-2.5 bg-white border border-gray-300 rounded-lg shadow-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2">
+                🔄 Обновить
+            </button>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden relative" id="gantt-container">
+            <!-- Loading state -->
+            <div id="loading" class="absolute inset-0 bg-white/80 z-50 flex items-center justify-center backdrop-blur-sm">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600"></div>
+            </div>
+
+            <div class="overflow-x-auto pb-4">
+                <div id="gantt-chart" class="gantt-grid min-w-[1000px]">
+                    <!-- Header will be generated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const monthNames = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
+        const DAYS_TO_SHOW = 14;
+
+        document.addEventListener('DOMContentLoaded', fetchGanttData);
+
+        function normalizeDate(dateStr) {
+            const d = new Date(dateStr);
+            d.setHours(0, 0, 0, 0);
+            return d;
+        }
+
+        async function fetchGanttData() {
+            document.getElementById('loading').style.display = 'flex';
+            
+            try {
+                const response = await fetch('/api/gantt');
+                if (!response.ok) throw new Error('Ошибка сервера');
+                
+                const tasks = await response.json() || [];
+                renderGantt(tasks);
+            } catch (error) {
+                console.error("Fetch error:", error);
+                document.getElementById('gantt-chart').innerHTML = `<div class="p-8 text-center text-red-500 col-span-15">Ошибка загрузки задач: ${error.message}</div>`;
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        function renderGantt(tasks) {
+            const chart = document.getElementById('gantt-chart');
+            chart.innerHTML = ''; // Clear
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            // 1. Render Header
+            let headerHTML = `<div class="gantt-header text-left pl-6 bg-gray-100 rounded-tl-xl border-b border-gray-200">Задача</div>`;
+            
+            for (let i = 0; i < DAYS_TO_SHOW; i++) {
+                const colDate = new Date(today);
+                colDate.setDate(today.getDate() + i);
+                
+                let dayStr = colDate.getDate();
+                // User asked to show month for today OR if it's the 1st of the month
+                if (i === 0 || colDate.getDate() === 1) {
+                    dayStr = `<span class="text-xs text-gray-400 font-medium uppercase tracking-wider block mb-1">${monthNames[colDate.getMonth()]}</span>${dayStr}`;
+                } else {
+                     dayStr = `<span class="text-xs text-transparent block mb-1">-</span>${dayStr}`; // Placeholder to keep height consistent
+                }
+
+                let classes = "gantt-header border-b border-gray-200 border-l border-white/50";
+                if (i === 0) classes += " text-blue-600 font-bold bg-blue-50/50"; // Highlight today column
+
+                headerHTML += `<div class="${classes}">${dayStr}</div>`;
+            }
+            chart.innerHTML += headerHTML;
+
+            if (tasks.length === 0) {
+                 chart.innerHTML += `<div class="p-8 text-center text-gray-500 font-medium" style="grid-column: 1 / -1;">Нет предстоящих задач</div>`;
+                 return;
+            }
+
+            // 2. Render Tasks
+            tasks.forEach((task, index) => {
+                const endDate = normalizeDate(task.end_time);
+                
+                // Calculate difference in days safely
+                const diffTime = endDate.getTime() - today.getTime();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                
+                // Constrain length between 1 and DAYS_TO_SHOW
+                let spanDays = diffDays;
+                if (spanDays < 0) spanDays = 0; // Should be filtered by backend, but just in case
+                if (spanDays === 0) spanDays = 1; // Minimum width is 1 day
+                if (spanDays > DAYS_TO_SHOW) spanDays = DAYS_TO_SHOW;
+
+                const rowHTML = `
+                    <div class="task-row group">
+                        <div class="task-name border-r border-gray-100 group-hover:bg-blue-50/30 transition-colors" title="${task.name}">
+                            ${task.name}
+                        </div>
+                        <div class="task-tracks group-hover:bg-blue-50/10 transition-colors px-1">
+                            ${spanDays > 0 ? `
+                                <div class="task-bar relative shadow-sm" 
+                                     style="grid-column: 1 / span ${spanDays}; animation-delay: ${index * 0.05}s"
+                                     title="${task.name} (до ${endDate.toLocaleDateString()})">
+                                     <div class="absolute inset-y-0 right-3 flex items-center text-white/90 text-xs font-medium opacity-0 hover:opacity-100 transition-opacity">
+                                         до ${endDate.getDate()}.${String(endDate.getMonth()+1).padStart(2,'0')}
+                                     </div>
+                                </div>
+                            ` : `<div style="grid-column: 1 / span 1;"></div>`}
+                        </div>
+                    </div>
+                `;
+                chart.innerHTML += rowHTML;
+            });
+        }
+    </script>
+</body>
+</html>
