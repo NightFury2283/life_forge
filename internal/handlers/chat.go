@@ -32,7 +32,7 @@ func NewChatHandler(contextStorage *storage.ContextStorage, aiClient *ai.GigaCha
 }
 
 func (ch *ChatHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
-	op := "handlers.chat.go HandleChat"
+	op := "internal/handlers/chat.go HandleChat"
 
 	log.Println("New request /chat")
 
