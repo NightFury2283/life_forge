@@ -4,351 +4,257 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LifeForge — Чат + Календарь</title>
+    <title>LifeForge — AI Planner</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-slide-in { animation: slideIn 0.3s ease-out; }
+
+        /* The drag handle */
+        #resizer { cursor: col-resize; transition: background 0.2s; }
+        #resizer:hover, #resizer.active { background: #9ca3af; } /* gray-400 */
+    </style>
 </head>
 
-<body class="bg-gradient-to-br from-blue-50 to-indigo-100 h-screen overflow-hidden">
-    <div class="flex h-screen">
-        <!-- ЧАТ (левая панель) -->
-        <div id="chat-panel" class="w-1/2 bg-white shadow-2xl border-r border-gray-200 flex flex-col resizable">
-            <div class="p-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
-                <h1 class="text-2xl font-bold">🤖 LifeForge AI</h1>
-                <p class="text-blue-100">Авторизуйся: <a href="/auth/google" class="underline">Google Calendar</a></p>
+<body class="bg-gray-100 h-screen w-screen overflow-hidden flex font-sans text-gray-800 selection:bg-blue-200">
+    
+    <!-- Outer padding wrapper -->
+    <div class="flex w-full h-full p-6 relative gap-4" id="main-container">
+
+        <!-- LEFT PANEL: CHAT CARD -->
+        <div id="chat-panel" class="bg-white rounded-[2rem] shadow-xl border border-gray-200 flex flex-col overflow-hidden relative" style="width: 45%; min-width: 30%;">
+            
+            <!-- Header -->
+            <div class="px-8 py-5 border-b border-gray-100 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-between">
+                <h1 class="text-xl font-bold font-mono tracking-tight text-gray-900">Life-Forge AI</h1>
+                <p class="text-xs text-gray-400">
+                    <a href="/auth/google" class="hover:text-blue-500 underline transition-colors">Google Auth</a>
+                </p>
             </div>
 
-            <!-- Сообщения -->
-            <div id="messages" class="flex-1 p-6 overflow-y-auto space-y-4 bg-gray-50">
-                <div class="text-center text-gray-500 py-8">Начни чат!</div>
+            <!-- Messages Area -->
+            <div id="messages" class="flex-1 p-8 overflow-y-auto space-y-6 bg-[#fcfcfc] flex flex-col">
+                <div class="text-center text-gray-400 py-8 text-sm">Начните общение с ИИ для планирования задач!</div>
             </div>
 
-            <!-- Input -->
-            <div class="p-6 bg-white border-t border-gray-200">
-                <div class="flex gap-2">
-                    <input id="user-message" type="text" placeholder="Напиши сообщение..."
-                        class="flex-1 p-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+            <!-- Input Area -->
+            <div class="p-6 bg-white border-t border-gray-100 relative z-10">
+                <div class="flex items-center bg-gray-50 border border-gray-200 rounded-full p-2 pr-2.5 shadow-sm focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-400 transition-all">
+                    <input id="user-message" type="text" placeholder="Привет, я ИИ и помогу тебе с планированием. Только напиши!"
+                        class="flex-1 px-4 py-2.5 bg-transparent border-none focus:outline-none text-gray-700 placeholder-gray-400"
                         autocomplete="off">
-
+                    
                     <button id="send-button" type="button"
-                        class="p-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all">
-                        ➤
+                        class="p-3 bg-gray-900 text-white rounded-full hover:bg-black transition-transform transform active:scale-95 flex items-center justify-center">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
                     </button>
-                </div>
-                <div class="text-xs text-gray-500 mt-2 text-center">
-                    /clear-chat | /calendar
                 </div>
             </div>
         </div>
 
-        <!-- calendar-panel -->
-        <div id="calendar-panel" class="w-1/2 shadow-2xl resizable">
-            <div class="p-6 bg-gradient-to-r from-emerald-600 to-teal-600 text-white sticky top-0 z-10 flex justify-between items-center">
-                <h2 class="text-xl font-bold">📅 Google Calendar</h2>
-                <div class="flex gap-2">
+        <!-- DRAG RESIZER -->
+        <div id="resizer" class="w-1.5 bg-gray-200 hover:bg-gray-300 rounded-full flex-shrink-0 relative group flex items-center justify-center h-20 self-center transition-colors">
+            <div class="w-1 h-8 rounded bg-gray-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+        </div>
+
+        <!-- RIGHT PANEL: CALENDAR CARD -->
+        <div id="calendar-panel" class="bg-white rounded-[2rem] shadow-xl border border-gray-200 flex flex-col overflow-hidden relative" style="width: 55%; min-width: 30%;">
+            
+            <!-- Header -->
+            <div class="px-8 py-5 border-b border-gray-100 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-between">
+                <h2 class="text-xl font-bold font-mono tracking-tight text-gray-900">Google Calendar</h2>
+                <div class="flex items-center gap-3">
                     <a href="/static/calendar.html" target="_blank"
-                       class="px-3 py-1 bg-white/20 rounded-lg hover:bg-white/30 text-sm font-medium transition-colors flex items-center gap-2 backdrop-blur-sm border border-white/10 shadow-sm">
-                        📊 Гант
+                       class="px-4 py-1.5 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 text-sm font-semibold transition-colors flex items-center gap-2">
+                        📊 Диаграмма Ганта
                     </a>
-                    <button onclick="toggleCalendarSize()"
-                        class="px-3 py-1 bg-white/20 rounded-full hover:bg-white/30 transition-colors backdrop-blur-sm border border-white/10">
-                        ↔
-                    </button>
                 </div>
             </div>
-            <!-- Google Calendar iframe -->
-            <iframe id="google-calendar"
-                src="https://calendar.google.com/calendar/embed?src=alexklinniy@gmail.com&ctz=Europe%2FMoscow"
-                class="w-full h-full border-0" style="min-height: 600px;" allowfullscreen scrolling="no">
-            </iframe>
+
+            <!-- Calendar iframe -->
+            <div class="flex-1 bg-white overflow-hidden relative">
+                <iframe id="google-calendar"
+                    src="https://calendar.google.com/calendar/embed?src=alexklinniy@gmail.com&ctz=Europe%2FMoscow&mode=WEEK"
+                    class="absolute inset-0 w-full h-full border-0" allowfullscreen scrolling="no">
+                </iframe>
+            </div>
+
+            <!-- Gamification Floating Button -->
+            <button class="absolute bottom-6 right-6 px-6 py-2.5 bg-white border-2 border-gray-900 rounded-full shadow-lg font-bold text-gray-900 hover:bg-gray-50 transition-transform hover:-translate-y-1 active:scale-95 z-20">
+                Gamification
+            </button>
         </div>
+
     </div>
 
+    <!-- SCRIPT -->
     <script>
-        console.log('=== LifeForge AI Debug ===');
-        console.log('Скрипт начал выполнение');
+        // === Resizer Logic ===
+        const resizer = document.getElementById('resizer');
+        const leftPanel = document.getElementById('chat-panel');
+        const rightPanel = document.getElementById('calendar-panel');
+        const container = document.getElementById('main-container');
 
-        // Основная функция отправки сообщения
+        let isResizing = false;
+
+        resizer.addEventListener('mousedown', function(e) {
+            isResizing = true;
+            resizer.classList.add('active');
+            document.body.style.cursor = 'col-resize';
+            document.getElementById('google-calendar').style.pointerEvents = 'none'; // Prevent iframe capturing mouse
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!isResizing) return;
+            const containerRect = container.getBoundingClientRect();
+            // Substract padding left (24px gap is handled by flex math)
+            let newLeftWidth = e.clientX - containerRect.left - 24; 
+            
+            if (newLeftWidth < parseInt(containerRect.width * 0.3)) newLeftWidth = parseInt(containerRect.width * 0.3); 
+            if (newLeftWidth > containerRect.width - parseInt(containerRect.width * 0.3)) newLeftWidth = containerRect.width - parseInt(containerRect.width * 0.3);
+
+            const percentage = (newLeftWidth / containerRect.width) * 100;
+            leftPanel.style.width = `calc(${percentage}% - 12px)`; // Approx gap splitting
+            rightPanel.style.width = `calc(${100 - percentage}% - 12px)`;
+        });
+
+        document.addEventListener('mouseup', function(e) {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('active');
+                document.body.style.cursor = '';
+                document.getElementById('google-calendar').style.pointerEvents = 'auto';
+            }
+        });
+
+        // === Chat Logic ===
         async function sendMessage(event) {
-            console.log('=== ФУНКЦИЯ SENDMESSAGE ВЫЗВАНА ===');
-
             if (event) {
-                event.preventDefault(); // ТОЛЬКО preventDefault
-                console.log('Event предотвращен');
+                event.preventDefault();
             }
 
             const input = document.getElementById('user-message');
-            console.log('Найден input элемент:', input);
-
-            if (!input) {
-                console.error('ERROR: input элемент не найден!');
-                showBotMessage('❌ Ошибка: поле ввода не найдено');
-                return;
-            }
-
             const message = input.value.trim();
-            console.log('Содержимое input:', `"${input.value}"`);
-            console.log('Сообщение после trim:', `"${message}"`);
 
-            if (!message) {
-                console.log('Пустое сообщение, выход из функции');
-                showBotMessage('Напишите что-нибудь...');
-                return;
-            }
+            if (!message) return;
 
-            console.log('Сообщение для отправки:', message);
-
-            // Показываем сообщение пользователя
             showUserMessage(message);
             input.value = '';
-            console.log('Поле ввода очищено');
 
-            // Показываем индикатор загрузки
             showLoading();
 
             try {
-                console.log('Начинаем отправку на сервер /chat...');
-
-                // Добавляем таймаут для отладки
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => {
-                    controller.abort();
-                    console.warn('Таймаут запроса');
-                }, 10000);
+                const timeoutId = setTimeout(() => { controller.abort(); }, 15000); // 15s timeout
 
-                // ВАЖНО: отправляем {text: message} как ожидает сервер
                 const response = await fetch('/chat', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ text: message }),
                     signal: controller.signal
                 });
 
                 clearTimeout(timeoutId);
 
-                console.log('Ответ получен, статус:', response.status);
-                console.log('Ответ OK?', response.ok);
-
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('Текст ошибки:', errorText);
-                    throw new Error(`HTTP ошибка ${response.status}: ${errorText}`);
+                    throw new Error(`HTTP ошибка ${response.status}`);
                 }
 
                 const data = await response.json();
-                console.log('Данные ответа от сервера:', data);
 
-                // Проверяем разные возможные поля ответа
-                if (data.response) {
-                    showBotMessage(data.response);
-                } else if (data.message) {
-                    showBotMessage(data.message);
-                } else if (data.error) {
-                    showBotMessage('Ошибка: ' + data.error);
-                } else {
-                    console.warn('Непонятный формат ответа:', data);
-                    showBotMessage('Получен ответ: ' + JSON.stringify(data, null, 2));
-                }
+                if (data.response) showBotMessage(data.response);
+                else if (data.message) showBotMessage(data.message);
+                else if (data.error) showBotMessage('Ошибка: ' + data.error);
+                else showBotMessage('Ответ: ' + JSON.stringify(data));
 
-                // Обновляем календарь
                 refreshCalendar();
             } catch (error) {
-                console.error('ОШИБКА при отправке:', error);
-
                 let errorMessage = '❌ Ошибка соединения';
-                if (error.name === 'AbortError') {
-                    errorMessage = '❌ Таймаут запроса (10 сек)';
-                } else if (error.message.includes('HTTP')) {
-                    errorMessage = `❌ ${error.message}`;
-                }
-
+                if (error.name === 'AbortError') errorMessage = '❌ Таймаут запроса';
                 showBotMessage(errorMessage);
             } finally {
                 hideLoading();
                 input.focus();
-                console.log('=== ФУНКЦИЯ SENDMESSAGE ЗАВЕРШЕНА ===');
             }
         }
 
         function showUserMessage(message) {
-            console.log('Показываем сообщение пользователя:', message);
             const messages = document.getElementById('messages');
             const userDiv = document.createElement('div');
-            userDiv.className = 'message p-4 rounded-2xl bg-blue-500 text-white ml-auto max-w-3xl animate-slide-in mb-4';
+            // User message bubble
+            userDiv.className = 'message p-4 rounded-2xl rounded-tr-sm bg-gray-800 text-white self-end max-w-[85%] animate-slide-in shadow-sm';
             userDiv.textContent = message;
             messages.appendChild(userDiv);
             messages.scrollTop = messages.scrollHeight;
         }
 
         function showBotMessage(message) {
-            console.log('Показываем сообщение бота:', message);
             const messages = document.getElementById('messages');
             const botDiv = document.createElement('div');
-            botDiv.className = 'message p-4 rounded-2xl bg-green-100 border border-green-200 max-w-3xl animate-slide-in mb-4';
-            botDiv.innerHTML = `
-                <div class="font-semibold text-green-800 mb-1">🤖 LifeForge AI:</div>
-                <div class="text-gray-800">${message}</div>
-            `;
+            // Bot message bubble
+            botDiv.className = 'message p-5 rounded-2xl rounded-tl-sm bg-white border border-gray-200 text-gray-800 self-start max-w-[85%] animate-slide-in shadow-sm leading-relaxed';
+            botDiv.innerHTML = `<div class="text-xs border-b border-gray-100 pb-2 mb-3 font-mono text-gray-400">🤖 LifeForge AI</div><div class="whitespace-pre-wrap">${message}</div>`;
             messages.appendChild(botDiv);
             messages.scrollTop = messages.scrollHeight;
         }
 
         function showLoading() {
-            console.log('Показываем индикатор загрузки');
             const messages = document.getElementById('messages');
             const loadingDiv = document.createElement('div');
             loadingDiv.id = 'loading-indicator';
-            loadingDiv.className = 'message p-4 rounded-2xl bg-gray-100 border border-gray-200 max-w-3xl animate-slide-in mb-4';
+            loadingDiv.className = 'message p-4 rounded-2xl rounded-tl-sm bg-white border border-gray-200 text-gray-800 self-start max-w-[85%] animate-slide-in shadow-sm flex items-center gap-3';
             loadingDiv.innerHTML = `
-                <div class="flex items-center gap-2">
-                    <div class="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                    <span class="text-gray-600">AI думает...</span>
+                <div class="flex space-x-1">
+                    <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0s"></div>
+                    <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                    <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
                 </div>
+                <span class="text-gray-400 text-sm">Печатает...</span>
             `;
             messages.appendChild(loadingDiv);
             messages.scrollTop = messages.scrollHeight;
         }
 
         function hideLoading() {
-            console.log('Скрываем индикатор загрузки');
             const loadingDiv = document.getElementById('loading-indicator');
-            if (loadingDiv) {
-                loadingDiv.remove();
-            }
+            if (loadingDiv) loadingDiv.remove();
         }
 
         function refreshCalendar() {
-            console.log('Обновляем календарь');
             const iframe = document.getElementById('google-calendar');
             if (iframe) {
-                // Перезагружаем iframe для обновления событий
                 iframe.src = iframe.src.split('&refresh=')[0] + '&refresh=' + new Date().getTime();
             }
         }
 
-        function toggleCalendarSize() {
-            console.log('Изменяем размер панелей');
-            const chatPanel = document.getElementById('chat-panel');
-            const calendarPanel = document.getElementById('calendar-panel');
-
-            if (chatPanel.style.width === '20%') {
-                chatPanel.style.width = '50%';
-                calendarPanel.style.width = '50%';
-            } else {
-                chatPanel.style.width = '20%';
-                calendarPanel.style.width = '80%';
-            }
-        }
-
-        // Инициализация при загрузке страницы
+        // INIT
         document.addEventListener('DOMContentLoaded', () => {
-            console.log('=== DOM ЗАГРУЖЕН ===');
-
             const input = document.getElementById('user-message');
             const sendButton = document.getElementById('send-button');
 
-            console.log('Найден input:', input);
-            console.log('Найден send-button:', sendButton);
+            if (input) input.focus();
 
-            // Фокус на input
-            if (input) {
-                input.focus();
-                console.log('Фокус установлен на input');
-            } else {
-                console.error('ERROR: input не найден при загрузке!');
-            }
-
-            // Обработчик для кнопки
             if (sendButton) {
-                console.log('Добавляем обработчик на кнопку');
-                sendButton.addEventListener('click', function (e) {
-                    console.log('Кнопка нажата через addEventListener');
-                    sendMessage(e);
-                });
-                console.log('Обработчик добавлен');
-            } else {
-                console.error('ERROR: кнопка не найдена!');
+                sendButton.addEventListener('click', sendMessage);
             }
 
-            // Обработчик Enter в input
             if (input) {
                 input.addEventListener('keypress', function (e) {
-                    console.log('Нажата клавиша в input:', e.key, 'Код:', e.keyCode);
-
                     if (e.key === 'Enter' && !e.shiftKey) {
-                        console.log('Enter нажат, отправляем сообщение');
                         e.preventDefault();
                         sendMessage(e);
                     }
                 });
-                console.log('Обработчик Enter добавлен');
             }
-
-            // Тестовый запрос для проверки соединения
-            console.log('Проверяем соединение с сервером...');
-            fetch('/')
-                .then(res => console.log('Сервер доступен, статус:', res.status))
-                .catch(err => console.error('Сервер недоступен:', err));
-
-            console.log('=== ИНИЦИАЛИЗАЦИЯ ЗАВЕРШЕНА ===');
         });
-
-        // Глобальная обработка ошибок
-        window.addEventListener('error', function (event) {
-            console.error('Глобальная ошибка:', event.error);
-            console.error('В файле:', event.filename, 'строка:', event.lineno);
-            showBotMessage('❌ JavaScript ошибка: ' + event.error.message);
-        });
-
-        console.log('=== СКРИПТ ЗАГРУЖЕН ===');
     </script>
-
-    <style>
-        .resizable {
-            resize: horizontal;
-            overflow: auto;
-        }
-
-        #chat-panel:hover,
-        #calendar-panel:hover {
-            cursor: col-resize;
-        }
-
-        #messages::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        #messages::-webkit-scrollbar-track {
-            background: #f1f5f9;
-        }
-
-        #messages::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 3px;
-        }
-
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .animate-slide-in {
-            animation: slideIn 0.3s ease-out;
-        }
-
-        button:hover {
-            transform: scale(1.05);
-        }
-    </style>
 </body>
-
 </html>
