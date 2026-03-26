@@ -39,15 +39,16 @@ func corsMiddleware(next http.Handler) http.Handler {
 func main() {
 	cfg := config.New()
 	if cfg.GigaChatKey == "" {
-		log.Fatal("Couldnt find Gigachad key")
+		log.Fatal("Couldnt find Gigachat key")
 	}
 
+	//signals
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
 
 	ai_client := ai.NewGigaChatClient(cfg.GigaChatKey)
 
-	pool, err := pgxpool.New(ctx, cfg.PostgresDSN)
+	pool, err := pgxpool.New(ctx, cfg.PostgresDSN) //пул соединений с БД
 	if err != nil {
 		log.Fatal("unable to connect to bd", err)
 	}

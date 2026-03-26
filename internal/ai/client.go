@@ -14,6 +14,10 @@ import (
 	"time"
 )
 
+const (
+	model = "GigaChat-Max"
+)
+
 type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
@@ -67,7 +71,7 @@ func (gg_cl *GigaChatClient) Generate(ctx context.Context, prompt string) (strin
 	}
 	//query to AI
 	reqBody := GigaChatRequest{
-		Model:    "GigaChat-Max",
+		Model:    model,
 		Messages: []Message{{Role: "user", Content: prompt}},
 		Stream:   false,
 	}

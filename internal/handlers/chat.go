@@ -110,7 +110,7 @@ func (ch *ChatHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("Parsing events: %d events", len(events))
-	saveEvents(ch, events, r)
+	saveEvents(ch, events)
 
 	// ui
 	if r.Header.Get("HX-Request") == "true" {
@@ -150,7 +150,7 @@ func (ch *ChatHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func saveEvents(ch *ChatHandler, events []*models.EventRequest, r *http.Request) {
+func saveEvents(ch *ChatHandler, events []*models.EventRequest) {
 	workers := make(chan struct{}, 5)
 
 	for i, event := range events {
@@ -217,6 +217,7 @@ func makeRequestToAIGetResponse(ctx context.Context, ch *ChatHandler, prompt str
 	return response, nil
 }
 
+// frontend
 func formatEventsHTML(events []*models.EventRequest) string {
 	if len(events) == 0 {
 		return `<div class="mt-2 text-xs text-green-600">✅ Calendar checked, dont need new events</div>`
