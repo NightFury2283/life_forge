@@ -107,9 +107,14 @@
                 </h1>
                 <p class="text-gray-500 mt-2">Ближайшие задачи на 14 дней</p>
             </div>
-            <button onclick="fetchGanttData()" class="px-5 py-2.5 bg-white border border-gray-300 rounded-lg shadow-sm font-medium hover:bg-gray-50 transition-colors flex items-center gap-2">
-                🔄 Обновить
-            </button>
+            <div class="flex items-center gap-3">
+                <a href="/" class="px-5 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg shadow-sm font-medium hover:bg-gray-50 transition-colors flex items-center shadow-sm">
+                    ◀ На главную
+                </a>
+                <button onclick="fetchGanttData()" class="px-5 py-2.5 bg-emerald-600 text-white border border-emerald-700 rounded-lg shadow-sm font-medium hover:bg-emerald-700 transition-colors flex items-center gap-2 shadow-sm">
+                    🔄 Обновить
+                </button>
+            </div>
         </div>
 
         <div class="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden relative" id="gantt-container">
@@ -193,14 +198,13 @@
             tasks.forEach((task, index) => {
                 const endDate = normalizeDate(task.end_time);
                 
-                // Calculate difference in days safely
+                // Calulcate difference in days and +1 to include the end date itself
                 const diffTime = endDate.getTime() - today.getTime();
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                 
                 // Constrain length between 1 and DAYS_TO_SHOW
-                let spanDays = diffDays;
-                if (spanDays < 0) spanDays = 0; // Should be filtered by backend, but just in case
-                if (spanDays === 0) spanDays = 1; // Minimum width is 1 day
+                let spanDays = diffDays + 1;
+                if (spanDays <= 0) spanDays = 1; // Minimum width is 1 day
                 if (spanDays > DAYS_TO_SHOW) spanDays = DAYS_TO_SHOW;
 
                 const rowHTML = `
