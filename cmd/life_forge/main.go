@@ -17,8 +17,9 @@ import (
 )
 
 type Router struct {
-	chatHandler *handlers.ChatHandler
-	authHandler *handlers.AuthHandler
+	chatHandler     *handlers.ChatHandler
+	authHandler     *handlers.AuthHandler
+	calendarHandler *handlers.CalendarHandler
 }
 
 func corsMiddleware(next http.Handler) http.Handler {
@@ -79,10 +80,11 @@ func main() {
 
 	chatHandler := handlers.NewChatHandler(contextStorage, ai_client, calendarStorage)
 	authHandler := handlers.NewAuthHandler(calendarStorage)
+	calendarHandler := handlers.NewCalendarHandler(calendarStorage)
 
 	mux := http.NewServeMux()
 
-	router := newRouter(chatHandler, authHandler)
+	router := newRouter(chatHandler, authHandler, calendarHandler)
 
 	router.register(mux)
 
@@ -124,10 +126,12 @@ func initStorageContext(ctx context.Context, storageInstance *storage.ContextSto
 func newRouter(
 	chatHandler *handlers.ChatHandler,
 	authHandler *handlers.AuthHandler,
+	calendarHandler *handlers.CalendarHandler,
 ) *Router {
 	return &Router{
-		chatHandler: chatHandler,
-		authHandler: authHandler,
+		chatHandler:     chatHandler,
+		authHandler:     authHandler,
+		calendarHandler: calendarHandler,
 	}
 }
 
@@ -140,6 +144,7 @@ func (r *Router) register(mux *http.ServeMux) {
 	mux.HandleFunc("/chat", r.chatHandler.HandleChat)
 	mux.HandleFunc("/auth/google", r.authHandler.HandleGoogleLogin)
 	mux.HandleFunc("/auth/callback", r.authHandler.HandleGoogleCallback)
+	mux.HandleFunc("/api/gantt", r.calendarHandler.HandleGanttDiagramm)
 
 	// Init storage context if needed
 	//initStorageContext(ctx, storage)
