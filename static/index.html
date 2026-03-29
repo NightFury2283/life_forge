@@ -152,8 +152,68 @@
 
     </div>
 
+    <!-- Event Details Tooltip -->
+    <div id="event-tooltip" class="absolute hidden z-[200] bg-white border border-gray-100 rounded-xl shadow-2xl p-5 w-72 transform transition-opacity duration-200 opacity-0 pointer-events-none">
+        <div class="flex justify-between items-start gap-3">
+            <h4 id="tooltip-title" class="font-bold text-gray-900 leading-snug"></h4>
+            <button id="tooltip-close" class="text-gray-400 hover:text-gray-600 transition-colors pointer-events-auto flex-shrink-0 bg-gray-50 hover:bg-gray-100 p-1 rounded-full">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <div class="flex items-center gap-2 mt-3 text-sm text-gray-500 font-medium">
+            <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <span id="tooltip-time"></span>
+        </div>
+    </div>
+
     <!-- SCRIPT -->
     <script>
+        // === Custom Event Tooltip Logic ===
+        function hideTooltip() {
+            const tooltip = document.getElementById('event-tooltip');
+            if (!tooltip) return;
+            tooltip.classList.remove('opacity-100');
+            tooltip.classList.add('opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                if (tooltip.classList.contains('opacity-0')) {
+                    tooltip.classList.add('hidden');
+                }
+            }, 200);
+        }
+
+        function showTooltip(e, title, timeStr) {
+            e.stopPropagation();
+            const tooltip = document.getElementById('event-tooltip');
+            if (!tooltip) return;
+
+            document.getElementById('tooltip-title').textContent = title;
+            document.getElementById('tooltip-time').textContent = timeStr;
+            
+            tooltip.classList.remove('hidden');
+            
+            let rect = e.currentTarget.getBoundingClientRect();
+            let topPosition = rect.bottom + window.scrollY + 8;
+            let leftPosition = rect.left + window.scrollX;
+            
+            tooltip.style.top = `${topPosition}px`;
+            tooltip.style.left = `${leftPosition}px`;
+
+            // Adjust if out of viewport
+            requestAnimationFrame(() => {
+                const tooltipRect = tooltip.getBoundingClientRect();
+                if (leftPosition + tooltipRect.width > window.innerWidth - 10) {
+                    leftPosition = window.innerWidth - tooltipRect.width - 20;
+                }
+                if (topPosition + tooltipRect.height > window.innerHeight - 10) {
+                    topPosition = rect.top + window.scrollY - tooltipRect.height - 8;
+                }
+                tooltip.style.left = `${Math.max(10, leftPosition)}px`;
+                tooltip.style.top = `${Math.max(10, topPosition)}px`;
+
+                tooltip.classList.remove('opacity-0');
+                tooltip.classList.add('opacity-100', 'pointer-events-auto');
+            });
+        }
         // === Resizer Logic ===
         const resizer = document.getElementById('resizer');
         const leftPanel = document.getElementById('chat-panel');
@@ -294,6 +354,12 @@
 
         // INIT
         document.addEventListener('DOMContentLoaded', () => {
+            document.addEventListener('click', hideTooltip);
+            document.getElementById('tooltip-close')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                hideTooltip();
+            });
+
             const input = document.getElementById('user-message');
             const sendButton = document.getElementById('send-button');
 
@@ -322,10 +388,15 @@
                     const cals = await res.json();
                     const listDiv = document.getElementById('calendar-list');
                     listDiv.innerHTML = '';
+                    
+                    let savedStr = localStorage.getItem('life_forge_cals');
+                    let savedIds = savedStr ? JSON.parse(savedStr) : null;
+
                     cals.forEach(cal => {
+                        let isChecked = savedIds !== null ? savedIds.includes(cal.id) : cal.primary;
                         listDiv.innerHTML += `
                             <label class="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer">
-                                <input type="checkbox" value="${cal.id}" class="calendar-checkbox w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500" ${cal.primary ? 'checked' : ''}>
+                                <input type="checkbox" value="${cal.id}" class="calendar-checkbox w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500" ${isChecked ? 'checked' : ''}>
                                 <div class="flex items-center gap-2 flex-1 min-w-0">
                                     <div class="w-3 h-3 rounded-full flex-shrink-0" style="background-color: ${cal.backgroundColor}"></div>
                                     <span class="text-sm font-medium text-gray-700 truncate">${cal.summary}</span>
@@ -357,6 +428,8 @@
         function updateActiveCalendars() {
             const checkboxes = document.querySelectorAll('.calendar-checkbox:checked');
             activeCalendars = Array.from(checkboxes).map(cb => cb.value);
+
+            localStorage.setItem('life_forge_cals', JSON.stringify(activeCalendars));
 
             const ganttLink = document.getElementById('gantt-link');
             if (ganttLink) {
@@ -434,7 +507,7 @@
                 
                 const isToday = colDate.toDateString() === new Date().toDateString();
                 const dayHeader = document.createElement('div');
-                dayHeader.className = `flex-1 py-2 flex flex-col items-center border-r border-gray-100 ${isToday ? 'bg-blue-50/50' : 'bg-white'}`;
+                dayHeader.className = `flex-1 min-w-0 w-0 py-2 flex flex-col items-center border-r border-gray-100 ${isToday ? 'bg-blue-50/50' : 'bg-white'}`;
                 
                 dayHeader.innerHTML = `
                     <div class="text-xs uppercase tracking-wider text-gray-500 font-semibold">${dayNames[i]}</div>
@@ -451,7 +524,7 @@
 
             for (let i = 0; i < 7; i++) {
                 const col = document.createElement('div');
-                col.className = 'flex-1 border-r border-gray-100 relative';
+                col.className = 'flex-1 min-w-0 w-0 border-r border-gray-100 relative';
                 col.id = `col-day-${i}`;
                 colsContainer.appendChild(col);
             }
@@ -466,6 +539,8 @@
                 const events = await res.json();
                 
                 if (events && events.length > 0) {
+                    let dailyEvents = [[], [], [], [], [], [], []];
+
                     events.forEach(ev => {
                         let evtStart = new Date(ev.start_time);
                         let evtEnd = new Date(ev.end_time);
@@ -485,6 +560,7 @@
                                     el.className = 'bg-blue-100 text-blue-800 text-[10px] font-semibold rounded px-1.5 py-0.5 truncate shadow-sm cursor-pointer border border-blue-200';
                                     el.title = ev.name;
                                     el.textContent = ev.name;
+                                    el.addEventListener('click', (e) => showTooltip(e, ev.name, `Весь день`));
                                     const container = document.getElementById(`allday-col-${targetCol}`);
                                     if(container) container.appendChild(el);
                                 }
@@ -494,19 +570,62 @@
                             if(startDayOffset >= 0 && startDayOffset <= 6) {
                                 const startMins = evtStart.getHours() * 60 + evtStart.getMinutes();
                                 if (durationMins <= 0 || isNaN(durationMins)) durationMins = 30; // fallback
-
-                                const el = document.createElement('div');
-                                el.className = 'absolute inset-x-1 mx-1 bg-red-100/90 hover:bg-red-200/90 border-l-4 border-red-500 rounded text-xs p-1.5 overflow-hidden transition-colors shadow-sm animate-slide-in cursor-pointer z-20 hover:z-30';
-                                el.style.top = `${startMins}px`;
-                                el.style.height = `${durationMins}px`;
-                                el.innerHTML = `<div class="font-semibold text-red-900 truncate leading-tight">${ev.name}</div>
-                                              <div class="text-red-700/80 text-[10px] mt-0.5">${evtStart.getHours().toString().padStart(2,'0')}:${evtStart.getMinutes().toString().padStart(2,'0')}</div>`;
-                                
-                                const col = document.getElementById(`col-day-${startDayOffset}`);
-                                if(col) col.appendChild(el);
+                                dailyEvents[startDayOffset].push({ ev, startMins, durationMins, evtStart, evtEnd });
                             }
                         }
                     });
+
+                    for (let d = 0; d < 7; d++) {
+                        let dayEvts = dailyEvents[d];
+                        dayEvts.sort((a,b) => a.startMins - b.startMins);
+
+                        for (let i = 0; i < dayEvts.length; i++) {
+                            let curr = dayEvts[i];
+                            let overlaps = [];
+                            let currStart = curr.startMins;
+                            let currEnd = curr.startMins + curr.durationMins;
+
+                            for (let j = 0; j < dayEvts.length; j++) {
+                                let other = dayEvts[j];
+                                let otherStart = other.startMins;
+                                let otherEnd = other.startMins + other.durationMins;
+                                if (otherStart < currEnd && otherEnd > currStart) {
+                                    overlaps.push(j);
+                                }
+                            }
+
+                            let pos = overlaps.indexOf(i);
+                            let total = overlaps.length;
+                            
+                            let widthPct = 100 / total;
+                            let leftPct = pos * widthPct;
+
+                            const el = document.createElement('div');
+                            el.className = 'absolute border-l-4 rounded text-xs p-1.5 overflow-hidden transition-all shadow-sm animate-slide-in cursor-pointer z-20 hover:z-30';
+                            
+                            if (pos % 2 === 0) {
+                                el.classList.add('bg-red-100/90', 'hover:bg-red-200/90', 'border-red-500');
+                            } else {
+                                el.classList.add('bg-orange-100/90', 'hover:bg-orange-200/90', 'border-orange-500');
+                            }
+
+                            el.style.top = `${currStart}px`;
+                            el.style.height = `${curr.durationMins}px`;
+                            el.style.left = `calc(${leftPct}% + 4px)`;
+                            el.style.width = `calc(${widthPct}% - 8px)`;
+
+                            let stStr = `${curr.evtStart.getHours().toString().padStart(2,'0')}:${curr.evtStart.getMinutes().toString().padStart(2,'0')}`;
+                            let endStr = `${curr.evtEnd.getHours().toString().padStart(2,'0')}:${curr.evtEnd.getMinutes().toString().padStart(2,'0')}`;
+
+                            el.innerHTML = `<div class="font-semibold text-gray-900 truncate leading-tight">${curr.ev.name}</div>
+                                          <div class="text-gray-600 font-mono text-[9px] mt-0.5">${stStr}</div>`;
+                            
+                            el.addEventListener('click', (e) => showTooltip(e, curr.ev.name, `${stStr} - ${endStr}`));
+
+                            const col = document.getElementById(`col-day-${d}`);
+                            if(col) col.appendChild(el);
+                        }
+                    }
                 }
             } catch (err) {
                 console.error(err);

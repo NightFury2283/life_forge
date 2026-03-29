@@ -157,6 +157,10 @@
                 if (!response.ok) throw new Error('Ошибка сервера');
                 
                 const tasks = await response.json() || [];
+                
+                // Sort by nearest completion
+                tasks.sort((a,b) => new Date(a.end_time) - new Date(b.end_time));
+
                 renderGantt(tasks);
             } catch (error) {
                 console.error("Fetch error:", error);
