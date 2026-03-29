@@ -5,6 +5,7 @@ import (
 	"life_forge/internal/storage"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,6 +25,7 @@ type GanttTask struct {
 	Name      string    `json:"name"`
 	StartTime time.Time `json:"start_time"`
 	EndTime   time.Time `json:"end_time"`
+	IsAllDay  bool      `json:"is_all_day"`
 }
 
 func NewCalendarHandler(cs *storage.GoogleCalendarStorage) *CalendarHandler {
@@ -33,7 +35,26 @@ func NewCalendarHandler(cs *storage.GoogleCalendarStorage) *CalendarHandler {
 func (cal *CalendarHandler) HandleGanttDiagramm(w http.ResponseWriter, r *http.Request) {
 	op := "internal/handlers/calendar.go HandleGranttDiagramm"
 
-	eventsArr, err := cal.calendarStorage.ListEvents(r.Context(), daysToShowTasks)
+	timeMin := time.Now().UTC()
+	timeMax := time.Now().AddDate(0, 0, daysToShowTasks).UTC()
+
+	if startStr := r.URL.Query().Get("start"); startStr != "" {
+		if t, err := time.Parse(time.RFC3339, startStr); err == nil {
+			timeMin = t
+		}
+	}
+	if endStr := r.URL.Query().Get("end"); endStr != "" {
+		if t, err := time.Parse(time.RFC3339, endStr); err == nil {
+			timeMax = t
+		}
+	}
+
+	var calIDs []string
+	if cals := r.URL.Query().Get("calendars"); cals != "" {
+		calIDs = strings.Split(cals, ",")
+	}
+
+	eventsArr, err := cal.calendarStorage.ListEvents(r.Context(), timeMin, timeMax, calIDs...)
 
 	if err != nil {
 		http.Error(w, "Failed to load user events: "+err.Error(), http.StatusInternalServerError)
@@ -61,17 +82,37 @@ func (cal *CalendarHandler) HandleGanttDiagramm(w http.ResponseWriter, r *http.R
 			defer wgWorkers.Done()
 
 			for val := range eventsChan {
-				end, err := time.Parse(time.RFC3339, val.End.DateTime)
+				var start, end time.Time
+				var err error
+				isAllDay := false
+
+				if val.Start != nil && val.Start.DateTime != "" {
+					start, err = time.Parse(time.RFC3339, val.Start.DateTime)
+				} else if val.Start != nil && val.Start.Date != "" {
+					start, err = time.Parse("2006-01-02", val.Start.Date)
+					isAllDay = true
+				}
 				if err != nil {
-					log.Printf("Failed to parse time in event in %s with err: %v", op, err)
+					log.Printf("Failed to parse start time in event '%s': %v", val.Summary, err)
 					continue
 				}
 
-				endDay := normalizeToDay(end)
+				if val.End != nil && val.End.DateTime != "" {
+					end, err = time.Parse(time.RFC3339, val.End.DateTime)
+				} else if val.End != nil && val.End.Date != "" {
+					end, err = time.Parse("2006-01-02", val.End.Date)
+					isAllDay = true
+				}
+				if err != nil {
+					log.Printf("Failed to parse end time in event '%s': %v", val.Summary, err)
+					continue
+				}
+
 				resEvents <- GanttTask{
 					Name:      val.Summary,
-					StartTime: time.Now(),
-					EndTime:   endDay,
+					StartTime: start,
+					EndTime:   end,
+					IsAllDay:  isAllDay,
 				}
 			}
 		}()
@@ -109,4 +150,14 @@ func normalizeToDay(t time.Time) time.Time {
 		0, 0, 0, 0,
 		t.Location(),
 	)
+}
+
+func (cal *CalendarHandler) HandleGetCalendars(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	calendars, err := cal.calendarStorage.GetUserCalendars(r.Context())
+	if err != nil {
+		http.Error(w, "Failed to load calendars: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(calendars)
 }

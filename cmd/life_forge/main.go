@@ -69,7 +69,7 @@ func main() {
 
 	//debug
 	if calendarStorage.IsAuthorized() {
-		events, err := calendarStorage.ListEvents(ctx, 5)
+		events, err := calendarStorage.ListEvents(context.Background(), time.Now().UTC(), time.Now().AddDate(0, 0, 5).UTC())
 		if err != nil {
 			log.Printf("Error listing events: %v", err)
 		}
@@ -145,6 +145,7 @@ func (r *Router) register(mux *http.ServeMux) {
 	mux.HandleFunc("/auth/google", r.authHandler.HandleGoogleLogin)
 	mux.HandleFunc("/auth/callback", r.authHandler.HandleGoogleCallback)
 	mux.HandleFunc("/api/gantt", r.calendarHandler.HandleGanttDiagramm)
+	mux.HandleFunc("/api/calendars", r.calendarHandler.HandleGetCalendars)
 
 	// Init storage context if needed
 	//initStorageContext(ctx, storage)

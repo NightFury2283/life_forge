@@ -69,22 +69,79 @@
         <div id="calendar-panel" class="bg-white rounded-[2rem] shadow-xl border border-gray-200 flex flex-col overflow-hidden relative" style="width: 55%; min-width: 30%;">
             
             <!-- Header -->
-            <div class="px-8 py-5 border-b border-gray-100 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-between">
-                <h2 class="text-xl font-bold font-mono tracking-tight text-gray-900">Google Calendar</h2>
+            <div class="px-8 py-5 border-b border-gray-100 bg-white/50 backdrop-blur-sm relative z-[70] flex items-center justify-between">
+                <div class="relative group z-30" id="calendar-dropdown-container">
+                    <button class="flex items-center gap-2 text-xl font-bold font-mono tracking-tight text-gray-900 hover:text-gray-700 transition">
+                        Google Calendar
+                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <!-- Dropdown -->
+                    <div class="absolute left-0 top-full mt-2 w-72 bg-white border border-gray-100 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[100]">
+                        <div class="p-2 max-h-64 overflow-y-auto" id="calendar-list">
+                            <div class="text-sm text-gray-500 text-center py-2">Загрузка...</div>
+                        </div>
+                    </div>
+                </div>
                 <div class="flex items-center gap-3">
-                    <a href="/static/calendar.html" target="_blank"
+                    <a href="/static/calendar.html" target="_blank" id="gantt-link"
                        class="px-4 py-1.5 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 text-sm font-semibold transition-colors flex items-center gap-2">
                         📊 Диаграмма Ганта
                     </a>
                 </div>
             </div>
 
-            <!-- Calendar iframe -->
-            <div class="flex-1 bg-white overflow-hidden relative">
-                <iframe id="google-calendar"
-                    src="https://calendar.google.com/calendar/embed?src=alexklinniy@gmail.com&ctz=Europe%2FMoscow&mode=WEEK"
-                    class="absolute inset-0 w-full h-full border-0" allowfullscreen scrolling="no">
-                </iframe>
+            <!-- Custom Weekly Calendar UI -->
+            <div class="flex-1 bg-white overflow-hidden flex flex-col relative rounded-b-[2rem]" id="custom-calendar-container">
+                <!-- Controls Row -->
+                <div class="px-6 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 relative z-[60]">
+                    <div class="flex items-center gap-4">
+                        <h3 id="calendar-month-label" class="text-lg font-bold text-gray-800 capitalize">Календарь</h3>
+                        <div class="flex items-center bg-white rounded-lg border border-gray-200 shadow-sm ml-2">
+                            <button id="prev-week-btn" class="px-3 py-1.5 hover:bg-gray-50 text-gray-500 hover:text-gray-900 border-r border-gray-200 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                            </button>
+                            <button id="today-week-btn" class="px-4 py-1.5 text-sm font-medium hover:bg-gray-50 transition-colors text-gray-700">Сегодня</button>
+                            <button id="next-week-btn" class="px-3 py-1.5 hover:bg-gray-50 text-gray-500 hover:text-gray-900 border-l border-gray-200 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Calendar Grid -->
+                <div class="flex flex-col flex-1 overflow-hidden relative">
+                    <!-- Loading overlay -->
+                    <div id="calendar-loader" class="absolute inset-0 bg-white/70 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+                        <div class="flex space-x-1">
+                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0s"></div>
+                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
+                        </div>
+                    </div>
+
+                    <!-- Days Header -->
+                    <div id="calendar-days-header" class="flex border-b border-gray-200 bg-white z-20">
+                        <div class="w-14 flex-shrink-0 border-r border-gray-100 bg-white"></div>
+                        <div id="calendar-days-row" class="flex flex-1">
+                            <!-- 7 Days JS injected -->
+                        </div>
+                    </div>
+
+                    <!-- Scrollable Body -->
+                    <div id="calendar-scroll-area" class="flex-1 overflow-y-auto relative bg-[#fafafa]">
+                        <div class="flex relative min-h-[1440px]">
+                            <!-- Time Axis -->
+                            <div class="w-14 flex-shrink-0 border-r border-gray-100 bg-white relative z-10" id="calendar-time-axis"></div>
+                            
+                            <!-- Columns Container -->
+                            <div id="calendar-columns-container" class="flex flex-1 relative bg-white">
+                                <!-- Grid Lines Background -->
+                                <div class="absolute inset-0 z-0 pointer-events-none" id="calendar-grid-bg"></div>
+                                <!-- 7 Columns JS injected -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Gamification Floating Button -->
@@ -95,8 +152,68 @@
 
     </div>
 
+    <!-- Event Details Tooltip -->
+    <div id="event-tooltip" class="absolute hidden z-[200] bg-white border border-gray-100 rounded-xl shadow-2xl p-5 w-72 transform transition-opacity duration-200 opacity-0 pointer-events-none">
+        <div class="flex justify-between items-start gap-3">
+            <h4 id="tooltip-title" class="font-bold text-gray-900 leading-snug"></h4>
+            <button id="tooltip-close" class="text-gray-400 hover:text-gray-600 transition-colors pointer-events-auto flex-shrink-0 bg-gray-50 hover:bg-gray-100 p-1 rounded-full">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <div class="flex items-center gap-2 mt-3 text-sm text-gray-500 font-medium">
+            <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <span id="tooltip-time"></span>
+        </div>
+    </div>
+
     <!-- SCRIPT -->
     <script>
+        // === Custom Event Tooltip Logic ===
+        function hideTooltip() {
+            const tooltip = document.getElementById('event-tooltip');
+            if (!tooltip) return;
+            tooltip.classList.remove('opacity-100');
+            tooltip.classList.add('opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                if (tooltip.classList.contains('opacity-0')) {
+                    tooltip.classList.add('hidden');
+                }
+            }, 200);
+        }
+
+        function showTooltip(e, title, timeStr) {
+            e.stopPropagation();
+            const tooltip = document.getElementById('event-tooltip');
+            if (!tooltip) return;
+
+            document.getElementById('tooltip-title').textContent = title;
+            document.getElementById('tooltip-time').textContent = timeStr;
+            
+            tooltip.classList.remove('hidden');
+            
+            let rect = e.currentTarget.getBoundingClientRect();
+            let topPosition = rect.bottom + window.scrollY + 8;
+            let leftPosition = rect.left + window.scrollX;
+            
+            tooltip.style.top = `${topPosition}px`;
+            tooltip.style.left = `${leftPosition}px`;
+
+            // Adjust if out of viewport
+            requestAnimationFrame(() => {
+                const tooltipRect = tooltip.getBoundingClientRect();
+                if (leftPosition + tooltipRect.width > window.innerWidth - 10) {
+                    leftPosition = window.innerWidth - tooltipRect.width - 20;
+                }
+                if (topPosition + tooltipRect.height > window.innerHeight - 10) {
+                    topPosition = rect.top + window.scrollY - tooltipRect.height - 8;
+                }
+                tooltip.style.left = `${Math.max(10, leftPosition)}px`;
+                tooltip.style.top = `${Math.max(10, topPosition)}px`;
+
+                tooltip.classList.remove('opacity-0');
+                tooltip.classList.add('opacity-100', 'pointer-events-auto');
+            });
+        }
         // === Resizer Logic ===
         const resizer = document.getElementById('resizer');
         const leftPanel = document.getElementById('chat-panel');
@@ -237,6 +354,12 @@
 
         // INIT
         document.addEventListener('DOMContentLoaded', () => {
+            document.addEventListener('click', hideTooltip);
+            document.getElementById('tooltip-close')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                hideTooltip();
+            });
+
             const input = document.getElementById('user-message');
             const sendButton = document.getElementById('send-button');
 
@@ -254,7 +377,265 @@
                     }
                 });
             }
+
+            fetchCalendars();
         });
+
+        async function fetchCalendars() {
+            try {
+                const res = await fetch('/api/calendars');
+                if (res.ok) {
+                    const cals = await res.json();
+                    const listDiv = document.getElementById('calendar-list');
+                    listDiv.innerHTML = '';
+                    
+                    let savedStr = localStorage.getItem('life_forge_cals');
+                    let savedIds = savedStr ? JSON.parse(savedStr) : null;
+
+                    cals.forEach(cal => {
+                        let isChecked = savedIds !== null ? savedIds.includes(cal.id) : cal.primary;
+                        listDiv.innerHTML += `
+                            <label class="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer">
+                                <input type="checkbox" value="${cal.id}" class="calendar-checkbox w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500" ${isChecked ? 'checked' : ''}>
+                                <div class="flex items-center gap-2 flex-1 min-w-0">
+                                    <div class="w-3 h-3 rounded-full flex-shrink-0" style="background-color: ${cal.backgroundColor}"></div>
+                                    <span class="text-sm font-medium text-gray-700 truncate">${cal.summary}</span>
+                                </div>
+                            </label>
+                        `;
+                    });
+                    
+                    document.querySelectorAll('.calendar-checkbox').forEach(cb => {
+                        cb.addEventListener('change', updateActiveCalendars);
+                    });
+                    
+                    updateActiveCalendars();
+                }
+            } catch (err) {
+                console.error("Failed to load calendars: ", err);
+            }
+        }
+
+        function refreshCalendar() {
+            if (typeof loadCalendarWeek === 'function') {
+                loadCalendarWeek(currentDateOffset);
+            }
+        }
+
+        let activeCalendars = [];
+        let currentDateOffset = 0; // weeks from today
+
+        function updateActiveCalendars() {
+            const checkboxes = document.querySelectorAll('.calendar-checkbox:checked');
+            activeCalendars = Array.from(checkboxes).map(cb => cb.value);
+
+            localStorage.setItem('life_forge_cals', JSON.stringify(activeCalendars));
+
+            const ganttLink = document.getElementById('gantt-link');
+            if (ganttLink) {
+                if (activeCalendars.length > 0) {
+                    ganttLink.href = "/static/calendar.html?calendars=" + encodeURIComponent(activeCalendars.join(','));
+                } else {
+                    ganttLink.href = "/static/calendar.html";
+                }
+            }
+
+            loadCalendarWeek(currentDateOffset);
+        }
+
+        function initCustomCalendar() {
+            renderTimeAxis();
+            renderGridBackground();
+
+            document.getElementById('prev-week-btn').addEventListener('click', () => { currentDateOffset--; loadCalendarWeek(currentDateOffset); });
+            document.getElementById('next-week-btn').addEventListener('click', () => { currentDateOffset++; loadCalendarWeek(currentDateOffset); });
+            document.getElementById('today-week-btn').addEventListener('click', () => { currentDateOffset = 0; loadCalendarWeek(currentDateOffset); });
+        }
+
+        function getStartOfWeek(date) {
+            const result = new Date(date);
+            const day = result.getDay();
+            const diff = result.getDate() - day + (day === 0 ? -6 : 1);
+            result.setDate(diff);
+            result.setHours(0, 0, 0, 0);
+            return result;
+        }
+
+        function renderTimeAxis() {
+            const axis = document.getElementById('calendar-time-axis');
+            axis.innerHTML = '';
+            for (let i = 1; i < 24; i++) {
+                const hourDiv = document.createElement('div');
+                hourDiv.className = 'absolute w-full text-right pr-2 text-xs text-gray-400 font-mono transform -translate-y-1/2';
+                hourDiv.style.top = `${i * 60}px`;
+                hourDiv.textContent = `${i.toString().padStart(2, '0')}:00`;
+                axis.appendChild(hourDiv);
+            }
+        }
+
+        function renderGridBackground() {
+            const bg = document.getElementById('calendar-grid-bg');
+            bg.innerHTML = '';
+            for (let i = 1; i < 24; i++) {
+                const line = document.createElement('div');
+                line.className = 'absolute w-full border-b border-gray-50';
+                line.style.top = `${i * 60}px`;
+                bg.appendChild(line);
+            }
+        }
+
+        async function loadCalendarWeek(weekOffset) {
+            document.getElementById('calendar-loader').classList.remove('hidden');
+
+            const now = new Date();
+            const targetWeekDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (weekOffset * 7));
+            const startOfWeek = getStartOfWeek(targetWeekDate);
+            
+            const endOfWeek = new Date(startOfWeek);
+            endOfWeek.setDate(endOfWeek.getDate() + 7);
+
+            const monthNames = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+            document.getElementById('calendar-month-label').textContent = `${monthNames[startOfWeek.getMonth()]} ${startOfWeek.getFullYear()}`;
+
+            const daysRow = document.getElementById('calendar-days-row');
+            daysRow.innerHTML = '';
+            const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+            
+            for (let i = 0; i < 7; i++) {
+                const colDate = new Date(startOfWeek);
+                colDate.setDate(colDate.getDate() + i);
+                
+                const isToday = colDate.toDateString() === new Date().toDateString();
+                const dayHeader = document.createElement('div');
+                dayHeader.className = `flex-1 min-w-0 w-0 py-2 flex flex-col items-center border-r border-gray-100 ${isToday ? 'bg-blue-50/50' : 'bg-white'}`;
+                
+                dayHeader.innerHTML = `
+                    <div class="text-xs uppercase tracking-wider text-gray-500 font-semibold">${dayNames[i]}</div>
+                    <div class="text-xl font-medium ${isToday ? 'text-blue-600' : 'text-gray-900'} mt-0.5 mb-1">${colDate.getDate()}</div>
+                    <div class="w-full px-1 flex flex-col gap-1 min-h-[4px]" id="allday-col-${i}"></div>
+                `;
+                daysRow.appendChild(dayHeader);
+            }
+
+            const colsContainer = document.getElementById('calendar-columns-container');
+            const bgLines = document.getElementById('calendar-grid-bg');
+            colsContainer.innerHTML = '';
+            colsContainer.appendChild(bgLines);
+
+            for (let i = 0; i < 7; i++) {
+                const col = document.createElement('div');
+                col.className = 'flex-1 min-w-0 w-0 border-r border-gray-100 relative';
+                col.id = `col-day-${i}`;
+                colsContainer.appendChild(col);
+            }
+
+            try {
+                let listUrl = `/api/gantt?start=${startOfWeek.toISOString()}&end=${endOfWeek.toISOString()}`;
+                if (activeCalendars.length > 0) {
+                    listUrl += "&calendars=" + encodeURIComponent(activeCalendars.join(','));
+                }
+                const res = await fetch(listUrl);
+                if (!res.ok) throw new Error('Failed to fetch events');
+                const events = await res.json();
+                
+                if (events && events.length > 0) {
+                    let dailyEvents = [[], [], [], [], [], [], []];
+
+                    events.forEach(ev => {
+                        let evtStart = new Date(ev.start_time);
+                        let evtEnd = new Date(ev.end_time);
+                        
+                        if (evtEnd <= startOfWeek || evtStart >= endOfWeek) return;
+
+                        let durationMins = (evtEnd - evtStart) / (60 * 1000);
+                        let isAllDay = ev.is_all_day === true;
+
+                        if (isAllDay) {
+                            let spanDays = Math.ceil(durationMins / 1440);
+                            const startDayOffset = Math.floor((evtStart - startOfWeek) / (24 * 60 * 60 * 1000));
+                            for (let d = 0; d < spanDays; d++) {
+                                let targetCol = startDayOffset + d;
+                                if (targetCol >= 0 && targetCol <= 6) {
+                                    const el = document.createElement('div');
+                                    el.className = 'bg-blue-100 text-blue-800 text-[10px] font-semibold rounded px-1.5 py-0.5 truncate shadow-sm cursor-pointer border border-blue-200';
+                                    el.title = ev.name;
+                                    el.textContent = ev.name;
+                                    el.addEventListener('click', (e) => showTooltip(e, ev.name, `Весь день`));
+                                    const container = document.getElementById(`allday-col-${targetCol}`);
+                                    if(container) container.appendChild(el);
+                                }
+                            }
+                        } else {
+                            const startDayOffset = Math.floor((evtStart - startOfWeek) / (24 * 60 * 60 * 1000));
+                            if(startDayOffset >= 0 && startDayOffset <= 6) {
+                                const startMins = evtStart.getHours() * 60 + evtStart.getMinutes();
+                                if (durationMins <= 0 || isNaN(durationMins)) durationMins = 30; // fallback
+                                dailyEvents[startDayOffset].push({ ev, startMins, durationMins, evtStart, evtEnd });
+                            }
+                        }
+                    });
+
+                    for (let d = 0; d < 7; d++) {
+                        let dayEvts = dailyEvents[d];
+                        dayEvts.sort((a,b) => a.startMins - b.startMins);
+
+                        for (let i = 0; i < dayEvts.length; i++) {
+                            let curr = dayEvts[i];
+                            let overlaps = [];
+                            let currStart = curr.startMins;
+                            let currEnd = curr.startMins + curr.durationMins;
+
+                            for (let j = 0; j < dayEvts.length; j++) {
+                                let other = dayEvts[j];
+                                let otherStart = other.startMins;
+                                let otherEnd = other.startMins + other.durationMins;
+                                if (otherStart < currEnd && otherEnd > currStart) {
+                                    overlaps.push(j);
+                                }
+                            }
+
+                            let pos = overlaps.indexOf(i);
+                            let total = overlaps.length;
+                            
+                            let widthPct = 100 / total;
+                            let leftPct = pos * widthPct;
+
+                            const el = document.createElement('div');
+                            el.className = 'absolute border-l-4 rounded text-xs p-1.5 overflow-hidden transition-all shadow-sm animate-slide-in cursor-pointer z-20 hover:z-30';
+                            
+                            if (pos % 2 === 0) {
+                                el.classList.add('bg-red-100/90', 'hover:bg-red-200/90', 'border-red-500');
+                            } else {
+                                el.classList.add('bg-orange-100/90', 'hover:bg-orange-200/90', 'border-orange-500');
+                            }
+
+                            el.style.top = `${currStart}px`;
+                            el.style.height = `${curr.durationMins}px`;
+                            el.style.left = `calc(${leftPct}% + 4px)`;
+                            el.style.width = `calc(${widthPct}% - 8px)`;
+
+                            let stStr = `${curr.evtStart.getHours().toString().padStart(2,'0')}:${curr.evtStart.getMinutes().toString().padStart(2,'0')}`;
+                            let endStr = `${curr.evtEnd.getHours().toString().padStart(2,'0')}:${curr.evtEnd.getMinutes().toString().padStart(2,'0')}`;
+
+                            el.innerHTML = `<div class="font-semibold text-gray-900 truncate leading-tight">${curr.ev.name}</div>
+                                          <div class="text-gray-600 font-mono text-[9px] mt-0.5">${stStr}</div>`;
+                            
+                            el.addEventListener('click', (e) => showTooltip(e, curr.ev.name, `${stStr} - ${endStr}`));
+
+                            const col = document.getElementById(`col-day-${d}`);
+                            if(col) col.appendChild(el);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+            } finally {
+                document.getElementById('calendar-loader').classList.add('hidden');
+            }
+        }
+        
+        // initialize visual layout once
+        initCustomCalendar();
     </script>
 </body>
 </html>

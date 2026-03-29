@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LifeForge — AI Planner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-slide-in { animation: slideIn 0.3s ease-out; }
+
+        /* The drag handle */
+        #resizer { cursor: col-resize; transition: background 0.2s; }
+        #resizer:hover, #resizer.active { background: #9ca3af; } /* gray-400 */
+    </style>
+</head>
+
+<body class="bg-gray-100 h-screen w-screen overflow-hidden flex font-sans text-gray-800 selection:bg-blue-200">
+    
+    <!-- Outer padding wrapper -->
+    <div class="flex w-full h-full p-6 relative gap-4" id="main-container">
+
+        <!-- LEFT PANEL: CHAT CARD -->
+        <div id="chat-panel" class="bg-white rounded-[2rem] shadow-xl border border-gray-200 flex flex-col overflow-hidden relative" style="width: 45%; min-width: 30%;">
+            
+            <!-- Header -->
+            <div class="px-8 py-5 border-b border-gray-100 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-between">
+                <h1 class="text-xl font-bold font-mono tracking-tight text-gray-900">Life-Forge AI</h1>
+                <p class="text-xs text-gray-400">
+                    <a href="/auth/yandex" class="hover:text-red-500 underline transition-colors">Яндекс Auth</a>
+                </p>
+            </div>
+
+            <!-- Messages Area -->
+            <div id="messages" class="flex-1 p-8 overflow-y-auto space-y-6 bg-[#fcfcfc] flex flex-col">
+                <div class="text-center text-gray-400 py-8 text-sm">Начните общение с ИИ для планирования задач!</div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="p-6 bg-white border-t border-gray-100 relative z-10">
+                <div class="flex items-center bg-gray-50 border border-gray-200 rounded-full p-2 pr-2.5 shadow-sm focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-400 transition-all">
+                    <input id="user-message" type="text" placeholder="Привет, я ИИ и помогу тебе с планированием. Только напиши!"
+                        class="flex-1 px-4 py-2.5 bg-transparent border-none focus:outline-none text-gray-700 placeholder-gray-400"
+                        autocomplete="off">
+                    
+                    <button id="send-button" type="button"
+                        class="p-3 bg-gray-900 text-white rounded-full hover:bg-black transition-transform transform active:scale-95 flex items-center justify-center">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- DRAG RESIZER -->
+        <div id="resizer" class="w-1.5 bg-gray-200 hover:bg-gray-300 rounded-full flex-shrink-0 relative group flex items-center justify-center h-20 self-center transition-colors">
+            <div class="w-1 h-8 rounded bg-gray-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+        </div>
+
+        <!-- RIGHT PANEL: CALENDAR CARD -->
+        <div id="calendar-panel" class="bg-white rounded-[2rem] shadow-xl border border-gray-200 flex flex-col overflow-hidden relative" style="width: 55%; min-width: 30%;">
+            
+            <!-- Header -->
+            <div class="px-8 py-5 border-b border-gray-100 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-between">
+                <h2 class="text-xl font-bold font-mono tracking-tight text-gray-900">Яндекс Календарь</h2>
+                <div class="flex items-center gap-3">
+                    <a href="/static/calendar.html" target="_blank"
+                       class="px-4 py-1.5 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 text-sm font-semibold transition-colors flex items-center gap-2">
+                        📊 Диаграмма Ганта
+                    </a>
+                </div>
+            </div>
+
+            <!-- Custom Weekly Calendar UI -->
+            <div class="flex-1 bg-white overflow-hidden flex flex-col relative rounded-b-[2rem]" id="custom-calendar-container">
+                <!-- Controls Row -->
+                <div class="px-6 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+                    <div class="flex items-center gap-4">
+                        <h3 id="calendar-month-label" class="text-lg font-bold text-gray-800 capitalize">Календарь</h3>
+                        <div class="flex items-center bg-white rounded-lg border border-gray-200 shadow-sm ml-2">
+                            <button id="prev-week-btn" class="px-3 py-1.5 hover:bg-gray-50 text-gray-500 hover:text-gray-900 border-r border-gray-200 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                            </button>
+                            <button id="today-week-btn" class="px-4 py-1.5 text-sm font-medium hover:bg-gray-50 transition-colors text-gray-700">Сегодня</button>
+                            <button id="next-week-btn" class="px-3 py-1.5 hover:bg-gray-50 text-gray-500 hover:text-gray-900 border-l border-gray-200 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <a href="https://calendar.yandex.ru" target="_blank" class="px-4 py-1.5 bg-gray-900 text-white text-sm font-medium rounded-full shadow-sm hover:bg-black transition-colors flex items-center gap-2">
+                        Открыть в Яндекс
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                    </a>
+                </div>
+
+                <!-- Calendar Grid -->
+                <div class="flex flex-col flex-1 overflow-hidden relative">
+                    <!-- Loading overlay -->
+                    <div id="calendar-loader" class="absolute inset-0 bg-white/70 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+                        <div class="flex space-x-1">
+                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0s"></div>
+                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
+                        </div>
+                    </div>
+
+                    <!-- Days Header -->
+                    <div id="calendar-days-header" class="flex border-b border-gray-200 bg-white z-20">
+                        <div class="w-14 flex-shrink-0 border-r border-gray-100 bg-white"></div>
+                        <div id="calendar-days-row" class="flex flex-1">
+                            <!-- 7 Days JS injected -->
+                        </div>
+                    </div>
+
+                    <!-- Scrollable Body -->
+                    <div id="calendar-scroll-area" class="flex-1 overflow-y-auto relative bg-[#fafafa]">
+                        <div class="flex relative min-h-[1440px]">
+                            <!-- Time Axis -->
+                            <div class="w-14 flex-shrink-0 border-r border-gray-100 bg-white relative z-10" id="calendar-time-axis"></div>
+                            
+                            <!-- Columns Container -->
+                            <div id="calendar-columns-container" class="flex flex-1 relative bg-white">
+                                <!-- Grid Lines Background -->
+                                <div class="absolute inset-0 z-0 pointer-events-none" id="calendar-grid-bg"></div>
+                                <!-- 7 Columns JS injected -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gamification Floating Button -->
+            <button class="absolute bottom-6 right-6 px-6 py-2.5 bg-white border-2 border-gray-900 rounded-full shadow-lg font-bold text-gray-900 hover:bg-gray-50 transition-transform hover:-translate-y-1 active:scale-95 z-20">
+                Gamification
+            </button>
+        </div>
+
+    </div>
+
+    <!-- SCRIPT -->
+    <script>
+        // === Resizer Logic ===
+        const resizer = document.getElementById('resizer');
+        const leftPanel = document.getElementById('chat-panel');
+        const rightPanel = document.getElementById('calendar-panel');
+        const container = document.getElementById('main-container');
+
+        let isResizing = false;
+
+        resizer.addEventListener('mousedown', function(e) {
+            isResizing = true;
+            resizer.classList.add('active');
+            document.body.style.cursor = 'col-resize';
+            document.getElementById('google-calendar').style.pointerEvents = 'none'; // Prevent iframe capturing mouse
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!isResizing) return;
+            const containerRect = container.getBoundingClientRect();
+            // Substract padding left (24px gap is handled by flex math)
+            let newLeftWidth = e.clientX - containerRect.left - 24; 
+            
+            if (newLeftWidth < parseInt(containerRect.width * 0.3)) newLeftWidth = parseInt(containerRect.width * 0.3); 
+            if (newLeftWidth > containerRect.width - parseInt(containerRect.width * 0.3)) newLeftWidth = containerRect.width - parseInt(containerRect.width * 0.3);
+
+            const percentage = (newLeftWidth / containerRect.width) * 100;
+            leftPanel.style.width = `calc(${percentage}% - 12px)`; // Approx gap splitting
+            rightPanel.style.width = `calc(${100 - percentage}% - 12px)`;
+        });
+
+        document.addEventListener('mouseup', function(e) {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('active');
+                document.body.style.cursor = '';
+                document.getElementById('google-calendar').style.pointerEvents = 'auto';
+            }
+        });
+
+        // === Chat Logic ===
+        async function sendMessage(event) {
+            if (event) {
+                event.preventDefault();
+            }
+
+            const input = document.getElementById('user-message');
+            const message = input.value.trim();
+
+            if (!message) return;
+
+            showUserMessage(message);
+            input.value = '';
+
+            showLoading();
+
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => { controller.abort(); }, 15000); // 15s timeout
+
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: message }),
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ошибка ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.response) showBotMessage(data.response);
+                else if (data.message) showBotMessage(data.message);
+                else if (data.error) showBotMessage('Ошибка: ' + data.error);
+                else showBotMessage('Ответ: ' + JSON.stringify(data));
+
+                refreshCalendar();
+            } catch (error) {
+                let errorMessage = '❌ Ошибка соединения';
+                if (error.name === 'AbortError') errorMessage = '❌ Таймаут запроса';
+                showBotMessage(errorMessage);
+            } finally {
+                hideLoading();
+                input.focus();
+            }
+        }
+
+        function showUserMessage(message) {
+            const messages = document.getElementById('messages');
+            const userDiv = document.createElement('div');
+            // User message bubble
+            userDiv.className = 'message p-4 rounded-2xl rounded-tr-sm bg-gray-800 text-white self-end max-w-[85%] animate-slide-in shadow-sm';
+            userDiv.textContent = message;
+            messages.appendChild(userDiv);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function showBotMessage(message) {
+            const messages = document.getElementById('messages');
+            const botDiv = document.createElement('div');
+            // Bot message bubble
+            botDiv.className = 'message p-5 rounded-2xl rounded-tl-sm bg-white border border-gray-200 text-gray-800 self-start max-w-[85%] animate-slide-in shadow-sm leading-relaxed';
+            botDiv.innerHTML = `<div class="text-xs border-b border-gray-100 pb-2 mb-3 font-mono text-gray-400">🤖 LifeForge AI</div><div class="whitespace-pre-wrap">${message}</div>`;
+            messages.appendChild(botDiv);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function showLoading() {
+            const messages = document.getElementById('messages');
+            const loadingDiv = document.createElement('div');
+            loadingDiv.id = 'loading-indicator';
+            loadingDiv.className = 'message p-4 rounded-2xl rounded-tl-sm bg-white border border-gray-200 text-gray-800 self-start max-w-[85%] animate-slide-in shadow-sm flex items-center gap-3';
+            loadingDiv.innerHTML = `
+                <div class="flex space-x-1">
+                    <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0s"></div>
+                    <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                    <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
+                </div>
+                <span class="text-gray-400 text-sm">Печатает...</span>
+            `;
+            messages.appendChild(loadingDiv);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function hideLoading() {
+            const loadingDiv = document.getElementById('loading-indicator');
+            if (loadingDiv) loadingDiv.remove();
+        }
+
+        function refreshCalendar() {
+            if (typeof loadCalendarWeek === 'function') {
+                loadCalendarWeek(currentDateOffset);
+            }
+        }
+
+        // INIT
+        document.addEventListener('DOMContentLoaded', () => {
+            const input = document.getElementById('user-message');
+            const sendButton = document.getElementById('send-button');
+
+            if (input) input.focus();
+
+            if (sendButton) {
+                sendButton.addEventListener('click', sendMessage);
+            }
+
+            if (input) {
+                input.addEventListener('keypress', function (e) {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendMessage(e);
+                    }
+                });
+            }
+
+            initCustomCalendar();
+        });
+
+        // === Custom Calendar Logic ===
+        let currentDateOffset = 0; // weeks from today
+
+        function initCustomCalendar() {
+            renderTimeAxis();
+            renderGridBackground();
+            loadCalendarWeek(currentDateOffset);
+
+            document.getElementById('prev-week-btn').addEventListener('click', () => { currentDateOffset--; loadCalendarWeek(currentDateOffset); });
+            document.getElementById('next-week-btn').addEventListener('click', () => { currentDateOffset++; loadCalendarWeek(currentDateOffset); });
+            document.getElementById('today-week-btn').addEventListener('click', () => { currentDateOffset = 0; loadCalendarWeek(currentDateOffset); });
+        }
+
+        function getStartOfWeek(date) {
+            const result = new Date(date);
+            const day = result.getDay();
+            const diff = result.getDate() - day + (day === 0 ? -6 : 1);
+            result.setDate(diff);
+            result.setHours(0, 0, 0, 0);
+            return result;
+        }
+
+        function renderTimeAxis() {
+            const axis = document.getElementById('calendar-time-axis');
+            axis.innerHTML = '';
+            for (let i = 1; i < 24; i++) {
+                const hourDiv = document.createElement('div');
+                hourDiv.className = 'absolute w-full text-right pr-2 text-xs text-gray-400 font-mono transform -translate-y-1/2';
+                hourDiv.style.top = `${i * 60}px`;
+                hourDiv.textContent = `${i.toString().padStart(2, '0')}:00`;
+                axis.appendChild(hourDiv);
+            }
+        }
+
+        function renderGridBackground() {
+            const bg = document.getElementById('calendar-grid-bg');
+            bg.innerHTML = '';
+            for (let i = 1; i < 24; i++) {
+                const line = document.createElement('div');
+                line.className = 'absolute w-full border-b border-gray-50';
+                line.style.top = `${i * 60}px`;
+                bg.appendChild(line);
+            }
+        }
+
+        async function loadCalendarWeek(weekOffset) {
+            document.getElementById('calendar-loader').classList.remove('hidden');
+
+            const now = new Date();
+            const targetWeekDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (weekOffset * 7));
+            const startOfWeek = getStartOfWeek(targetWeekDate);
+            
+            const endOfWeek = new Date(startOfWeek);
+            endOfWeek.setDate(endOfWeek.getDate() + 7);
+
+            const monthNames = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+            document.getElementById('calendar-month-label').textContent = `${monthNames[startOfWeek.getMonth()]} ${startOfWeek.getFullYear()}`;
+
+            const daysRow = document.getElementById('calendar-days-row');
+            daysRow.innerHTML = '';
+            const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+            
+            for (let i = 0; i < 7; i++) {
+                const colDate = new Date(startOfWeek);
+                colDate.setDate(colDate.getDate() + i);
+                
+                const isToday = colDate.toDateString() === new Date().toDateString();
+                const dayHeader = document.createElement('div');
+                dayHeader.className = `flex-1 py-3 text-center border-r border-gray-100 ${isToday ? 'bg-blue-50/50' : 'bg-white'}`;
+                
+                dayHeader.innerHTML = `
+                    <div class="text-xs uppercase tracking-wider text-gray-500 font-semibold">${dayNames[i]}</div>
+                    <div class="text-xl font-medium ${isToday ? 'text-blue-600' : 'text-gray-900'} mt-0.5">${colDate.getDate()}</div>
+                `;
+                daysRow.appendChild(dayHeader);
+            }
+
+            const colsContainer = document.getElementById('calendar-columns-container');
+            const bgLines = document.getElementById('calendar-grid-bg');
+            colsContainer.innerHTML = '';
+            colsContainer.appendChild(bgLines);
+
+            for (let i = 0; i < 7; i++) {
+                const col = document.createElement('div');
+                col.className = 'flex-1 border-r border-gray-100 relative';
+                col.id = `col-day-${i}`;
+                colsContainer.appendChild(col);
+            }
+
+            try {
+                const res = await fetch(`/api/gantt?start=${startOfWeek.toISOString()}&end=${endOfWeek.toISOString()}`);
+                if (!res.ok) throw new Error('Failed to fetch events');
+                const events = await res.json();
+                
+                if (events && events.length > 0) {
+                    events.forEach(ev => {
+                        const evtStart = new Date(ev.start_time);
+                        const evtEnd = new Date(ev.end_time);
+                        
+                        if (evtEnd <= startOfWeek || evtStart >= endOfWeek) return;
+
+                        const startDayOffset = Math.floor((evtStart - startOfWeek) / (24 * 60 * 60 * 1000));
+                        if(startDayOffset >= 0 && startDayOffset <= 6) {
+                            const startMins = evtStart.getHours() * 60 + evtStart.getMinutes();
+                            let durationMins = (evtEnd - evtStart) / (60 * 1000);
+                            if (durationMins < 30) durationMins = 30;
+
+                            const el = document.createElement('div');
+                            el.className = 'absolute inset-x-1 mx-1 bg-red-100/90 hover:bg-red-200/90 border-l-4 border-red-500 rounded text-xs p-1.5 overflow-hidden transition-colors shadow-sm animate-slide-in cursor-pointer z-20 hover:z-30';
+                            el.style.top = `${startMins}px`;
+                            el.style.height = `${durationMins}px`;
+                            el.innerHTML = `<div class="font-semibold text-red-900 truncate leading-tight">${ev.title}</div>
+                                          <div class="text-red-700/80 text-[10px] mt-0.5">${evtStart.getHours().toString().padStart(2,'0')}:${evtStart.getMinutes().toString().padStart(2,'0')}</div>`;
+                            
+                            const col = document.getElementById(`col-day-${startDayOffset}`);
+                            if(col) col.appendChild(el);
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error(err);
+            } finally {
+                document.getElementById('calendar-loader').classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
