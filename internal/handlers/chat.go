@@ -173,7 +173,7 @@ func saveEvents(ch *ChatHandler, events []*models.EventRequest) {
 					log.Printf("✅ Event created: %s (ID: %s)", event.Title, createdEvent.Id)
 				}
 
-				err = ch.calendarStorage.SaveEvent(ctx, event)
+				err = ch.calendarStorage.SaveEventInDB(ctx, event)
 				if err != nil {
 					log.Printf("❌ Error to save event in db '%s': %v", event.Title, err)
 				} else {

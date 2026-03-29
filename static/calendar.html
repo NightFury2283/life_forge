@@ -147,7 +147,13 @@
             document.getElementById('loading').style.display = 'flex';
             
             try {
-                const response = await fetch('/api/gantt');
+                const urlParams = new URLSearchParams(window.location.search);
+                const calendars = urlParams.get('calendars');
+                let apiUrl = '/api/gantt';
+                if (calendars) {
+                    apiUrl += '?calendars=' + encodeURIComponent(calendars);
+                }
+                const response = await fetch(apiUrl);
                 if (!response.ok) throw new Error('Ошибка сервера');
                 
                 const tasks = await response.json() || [];

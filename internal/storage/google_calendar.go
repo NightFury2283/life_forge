@@ -18,6 +18,10 @@ import (
 	"google.golang.org/api/option"
 )
 
+const (
+	whereSaveEvent = "primary"
+)
+
 type GoogleCalendarStorage struct {
 	service *calendar.Service
 	config  *oauth2.Config
@@ -169,7 +173,7 @@ func formatRecurrenceRule(recurrence string) string {
 	}
 }
 
-func (gcs *GoogleCalendarStorage) SaveEvent(ctx context.Context, event *models.EventRequest) error {
+func (gcs *GoogleCalendarStorage) SaveEventInDB(ctx context.Context, event *models.EventRequest) error {
 	op := "internal/storage/google_calendar.go SaveEvent"
 
 	sql_query := `
@@ -193,30 +197,54 @@ func (gcs *GoogleCalendarStorage) SaveEvent(ctx context.Context, event *models.E
 	return nil
 }
 
-func (gcs *GoogleCalendarStorage) ListEvents(ctx context.Context, days int) ([]*calendar.Event, error) {
+func (gcs *GoogleCalendarStorage) ListEvents(ctx context.Context, timeMin, timeMax time.Time, calendarIDs ...string) ([]*calendar.Event, error) {
 	if gcs.service == nil {
 		return nil, fmt.Errorf("Календарь не подключен. Перейдите по /auth/google для авторизации.")
 	}
-	timeMin := time.Now().Format(time.RFC3339)
-	timeMax := time.Now().AddDate(0, 0, days).Format(time.RFC3339)
+	timeMinStr := timeMin.Format(time.RFC3339)
+	timeMaxStr := timeMax.Format(time.RFC3339)
 
-	events, err := gcs.service.Events.List("primary").
-		TimeMin(timeMin).
-		TimeMax(timeMax).
-		SingleEvents(true).
-		OrderBy("startTime").
-		Context(ctx).
-		Do()
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to list events: %w", err)
+	if len(calendarIDs) == 0 {
+		calendarIDs = []string{"primary"}
 	}
 
-	return events.Items, nil
+	var allEvents []*calendar.Event
+
+	for _, cid := range calendarIDs {
+		events, err := gcs.service.Events.List(cid).
+			TimeMin(timeMinStr).
+			TimeMax(timeMaxStr).
+			SingleEvents(true).
+			OrderBy("startTime").
+			Context(ctx).
+			Do()
+
+		if err != nil {
+			log.Printf("failed to list events for %s: %v", cid, err)
+			continue
+		}
+		allEvents = append(allEvents, events.Items...)
+	}
+
+	return allEvents, nil
+}
+
+// GetUserCalendars returns user's calendar list
+func (gcs *GoogleCalendarStorage) GetUserCalendars(ctx context.Context) ([]*calendar.CalendarListEntry, error) {
+	if gcs.service == nil {
+		return nil, fmt.Errorf("Календарь не авторизован")
+	}
+	list, err := gcs.service.CalendarList.List().Context(ctx).Do()
+	if err != nil {
+		return nil, err
+	}
+	return list.Items, nil
 }
 
 func (gcs *GoogleCalendarStorage) GetCalendarPreview(ctx context.Context, days int) string {
-	events, err := gcs.ListEvents(ctx, days)
+	timeMin := time.Now().UTC()
+	timeMax := time.Now().AddDate(0, 0, days).UTC()
+	events, err := gcs.ListEvents(ctx, timeMin, timeMax)
 	if err != nil {
 		return fmt.Sprintf("Error to load calendar: %v", err)
 	}
