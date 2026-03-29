@@ -6,21 +6,21 @@ import (
 )
 
 type AuthHandler struct {
-	calendarStorage *storage.GoogleCalendarStorage
+	calendarStorage *storage.YandexCalendarStorage
 }
 
-func NewAuthHandler(cs *storage.GoogleCalendarStorage) *AuthHandler {
+func NewAuthHandler(cs *storage.YandexCalendarStorage) *AuthHandler {
 	return &AuthHandler{calendarStorage: cs}
 }
 
 // /auth/google -> redirect to google
-func (h *AuthHandler) HandleGoogleLogin(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) HandleYandexLogin(w http.ResponseWriter, r *http.Request) {
 	url := h.calendarStorage.GetAuthURL()
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
 // /auth/callback -> Google send code here
-func (h *AuthHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) HandleYandexCallback(w http.ResponseWriter, r *http.Request) {
 	code := r.URL.Query().Get("code")
 	if code == "" {
 		http.Error(w, "Code not found", http.StatusBadRequest)

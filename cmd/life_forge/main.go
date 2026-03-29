@@ -61,9 +61,9 @@ func main() {
 
 	contextStorage := storage.NewContextStorage(pool)
 
-	calendarStorage, err := storage.NewGoogleCalendarStorage(pool)
+	calendarStorage, err := storage.NewYandexCalendarStorage(pool, cfg.YandexClientID, cfg.YandexClientSecret)
 	if err != nil {
-		log.Fatal("Error to connect to Google Calendar", err)
+		log.Fatal("Error to connect to Yandex Calendar API ", err)
 	}
 	log.Printf("Calendar status: authorized=%v", calendarStorage.IsAuthorized())
 
@@ -75,7 +75,7 @@ func main() {
 		}
 		log.Printf("📅 Calendar events found: %d", len(events))
 	} else {
-		log.Println("Go by url: 🔗 http://localhost:8080/auth/google")
+		log.Println("Go by url: 🔗 http://localhost:8080/auth/yandex")
 	}
 
 	chatHandler := handlers.NewChatHandler(contextStorage, ai_client, calendarStorage)
@@ -142,8 +142,8 @@ func (r *Router) register(mux *http.ServeMux) {
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
 	mux.HandleFunc("/chat", r.chatHandler.HandleChat)
-	mux.HandleFunc("/auth/google", r.authHandler.HandleGoogleLogin)
-	mux.HandleFunc("/auth/callback", r.authHandler.HandleGoogleCallback)
+	mux.HandleFunc("/auth/yandex", r.authHandler.HandleYandexLogin)
+	mux.HandleFunc("/auth/callback", r.authHandler.HandleYandexCallback)
 	mux.HandleFunc("/api/gantt", r.calendarHandler.HandleGanttDiagramm)
 
 	// Init storage context if needed

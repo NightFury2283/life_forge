@@ -17,7 +17,7 @@ const (
 )
 
 type CalendarHandler struct {
-	calendarStorage *storage.GoogleCalendarStorage
+	calendarStorage *storage.YandexCalendarStorage
 }
 
 type GanttTask struct {
@@ -26,7 +26,7 @@ type GanttTask struct {
 	EndTime   time.Time `json:"end_time"`
 }
 
-func NewCalendarHandler(cs *storage.GoogleCalendarStorage) *CalendarHandler {
+func NewCalendarHandler(cs *storage.YandexCalendarStorage) *CalendarHandler {
 	return &CalendarHandler{calendarStorage: cs}
 }
 

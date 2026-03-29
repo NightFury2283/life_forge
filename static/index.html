@@ -36,7 +36,7 @@
             <div class="px-8 py-5 border-b border-gray-100 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-between">
                 <h1 class="text-xl font-bold font-mono tracking-tight text-gray-900">Life-Forge AI</h1>
                 <p class="text-xs text-gray-400">
-                    <a href="/auth/google" class="hover:text-blue-500 underline transition-colors">Google Auth</a>
+                    <a href="/auth/yandex" class="hover:text-red-500 underline transition-colors">Яндекс Auth</a>
                 </p>
             </div>
 
@@ -70,7 +70,7 @@
             
             <!-- Header -->
             <div class="px-8 py-5 border-b border-gray-100 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-between">
-                <h2 class="text-xl font-bold font-mono tracking-tight text-gray-900">Google Calendar</h2>
+                <h2 class="text-xl font-bold font-mono tracking-tight text-gray-900">Яндекс Календарь</h2>
                 <div class="flex items-center gap-3">
                     <a href="/static/calendar.html" target="_blank"
                        class="px-4 py-1.5 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 text-sm font-semibold transition-colors flex items-center gap-2">
@@ -79,12 +79,17 @@
                 </div>
             </div>
 
-            <!-- Calendar iframe -->
-            <div class="flex-1 bg-white overflow-hidden relative">
-                <iframe id="google-calendar"
-                    src="https://calendar.google.com/calendar/embed?src=alexklinniy@gmail.com&ctz=Europe%2FMoscow&mode=WEEK"
-                    class="absolute inset-0 w-full h-full border-0" allowfullscreen scrolling="no">
-                </iframe>
+            <!-- Calendar iframe (Yandex) -->
+            <div class="flex-1 bg-gray-50 overflow-hidden relative flex flex-col items-center justify-center text-center p-8">
+                <div class="text-5xl mb-4">📅</div>
+                <h3 class="text-lg font-bold text-gray-800 mb-2">Календарь Яндекса</h3>
+                <p class="text-sm text-gray-500 max-w-xs mb-6 mx-auto">
+                    События синхронизируются в фоне с вашим Яндекс.Календарем. Прямая вставка интерфейса Яндекса пока не поддерживается.
+                </p>
+                <a href="https://calendar.yandex.ru" target="_blank"
+                   class="px-5 py-2.5 bg-gray-900 text-white font-medium rounded-full shadow-md hover:bg-black transition-colors">
+                    Открыть в Яндекс Календарь
+                </a>
             </div>
 
             <!-- Gamification Floating Button -->

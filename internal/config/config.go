@@ -6,16 +6,20 @@ import (
 )
 
 type Config struct {
-	PostgresDSN string
-	GigaChatKey string
+	PostgresDSN        string
+	GigaChatKey        string
+	YandexClientID     string
+	YandexClientSecret string
 }
 
 func New() *Config {
 	_ = godotenv.Load()
 
 	return &Config{
-		PostgresDSN: getEnv("POSTGRES_DSN", "postgres://postgres:12345@localhost:5432/life_forge?sslmode=disable"),
-		GigaChatKey: getEnv("GIGACHAT_AUTH_KEY", ""),
+		PostgresDSN:        getEnv("POSTGRES_DSN", "postgres://postgres:12345@localhost:5432/life_forge?sslmode=disable"),
+		GigaChatKey:        getEnv("GIGACHAT_AUTH_KEY", ""),
+		YandexClientID:     getEnv("YANDEX_CLIENT_ID", ""),
+		YandexClientSecret: getEnv("YANDEX_CLIENT_SECRET", ""),
 	}
 }
 

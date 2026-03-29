@@ -20,10 +20,10 @@ import (
 type ChatHandler struct {
 	contextStorage  *storage.ContextStorage
 	aiClient        *ai.GigaChatClient
-	calendarStorage *storage.GoogleCalendarStorage
+	calendarStorage *storage.YandexCalendarStorage
 }
 
-func NewChatHandler(contextStorage *storage.ContextStorage, aiClient *ai.GigaChatClient, calendarStorage *storage.GoogleCalendarStorage) *ChatHandler {
+func NewChatHandler(contextStorage *storage.ContextStorage, aiClient *ai.GigaChatClient, calendarStorage *storage.YandexCalendarStorage) *ChatHandler {
 	return &ChatHandler{
 		contextStorage:  contextStorage,
 		aiClient:        aiClient,
