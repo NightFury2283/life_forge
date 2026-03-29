@@ -33,7 +33,21 @@ func NewCalendarHandler(cs *storage.YandexCalendarStorage) *CalendarHandler {
 func (cal *CalendarHandler) HandleGanttDiagramm(w http.ResponseWriter, r *http.Request) {
 	op := "internal/handlers/calendar.go HandleGranttDiagramm"
 
-	eventsArr, err := cal.calendarStorage.ListEvents(r.Context(), daysToShowTasks)
+	timeMin := time.Now().UTC()
+	timeMax := time.Now().AddDate(0, 0, daysToShowTasks).UTC() // Default
+
+	if startStr := r.URL.Query().Get("start"); startStr != "" {
+		if t, err := time.Parse(time.RFC3339, startStr); err == nil {
+			timeMin = t
+		}
+	}
+	if endStr := r.URL.Query().Get("end"); endStr != "" {
+		if t, err := time.Parse(time.RFC3339, endStr); err == nil {
+			timeMax = t
+		}
+	}
+
+	eventsArr, err := cal.calendarStorage.ListEvents(r.Context(), timeMin, timeMax)
 
 	if err != nil {
 		http.Error(w, "Failed to load user events: "+err.Error(), http.StatusInternalServerError)

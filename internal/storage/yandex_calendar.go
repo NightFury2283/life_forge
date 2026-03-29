@@ -1,13 +1,17 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"life_forge/internal/models"
 	"log"
 	"net/http"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -101,7 +105,10 @@ func (ycs *YandexCalendarStorage) ExchangeCode(code string) error {
 	tok.TokenType = "OAuth"
 	saveToken("token.json", tok)
 
-	ycs.httpClient = ycs.config.Client(context.Background(), tok)
+	client := ycs.config.Client(context.Background(), tok)
+	client.Transport = &yandexETagFixTransport{Base: client.Transport}
+	ycs.httpClient = client
+	
 	return ycs.initCalDAVClient()
 }
 
@@ -112,7 +119,40 @@ func getClient(config *oauth2.Config) (*http.Client, error) {
 		return nil, err
 	}
 	tok.TokenType = "OAuth"
-	return config.Client(context.Background(), tok), nil
+	client := config.Client(context.Background(), tok)
+	client.Transport = &yandexETagFixTransport{Base: client.Transport}
+	return client, nil
+}
+
+type yandexETagFixTransport struct {
+	Base http.RoundTripper
+}
+
+func (t *yandexETagFixTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	base := t.Base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	resp, err := base.RoundTrip(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode == 207 || resp.StatusCode == 200 {
+		contentType := resp.Header.Get("Content-Type")
+		if strings.Contains(contentType, "xml") {
+			body, err := io.ReadAll(resp.Body)
+			if err == nil {
+				resp.Body.Close()
+				re := regexp.MustCompile(`(<(?:[a-zA-Z0-9\-]+:)?getetag[^>]*>)\s*([^"<]+?)\s*(</(?:[a-zA-Z0-9\-]+:)?getetag>)`)
+				fixedBody := re.ReplaceAll(body, []byte(`${1}"${2}"${3}`))
+				resp.Body = io.NopCloser(bytes.NewReader(fixedBody))
+				resp.ContentLength = int64(len(fixedBody))
+				resp.Header.Set("Content-Length", strconv.Itoa(len(fixedBody)))
+			}
+		}
+	}
+	return resp, nil
 }
 
 func tokenFromFile(file string) (*oauth2.Token, error) {
@@ -220,13 +260,10 @@ func (ycs *YandexCalendarStorage) SaveEvent(ctx context.Context, event *models.E
 	return nil
 }
 
-func (ycs *YandexCalendarStorage) ListEvents(ctx context.Context, days int) ([]*calendar.Event, error) {
+func (ycs *YandexCalendarStorage) ListEvents(ctx context.Context, timeMin, timeMax time.Time) ([]*calendar.Event, error) {
 	if ycs.client == nil || ycs.calendar == nil {
 		return nil, fmt.Errorf("Календарь Яндекса не подключен. Авторизуйтесь.")
 	}
-
-	timeMin := time.Now().UTC()
-	timeMax := time.Now().AddDate(0, 0, days).UTC()
 
 	query := &caldav.CalendarQuery{
 		CompRequest: caldav.CalendarCompRequest{
@@ -281,7 +318,9 @@ func (ycs *YandexCalendarStorage) ListEvents(ctx context.Context, days int) ([]*
 }
 
 func (ycs *YandexCalendarStorage) GetCalendarPreview(ctx context.Context, days int) string {
-	events, err := ycs.ListEvents(ctx, days)
+	timeMin := time.Now().UTC()
+	timeMax := time.Now().AddDate(0, 0, days).UTC()
+	events, err := ycs.ListEvents(ctx, timeMin, timeMax)
 	if err != nil {
 		return fmt.Sprintf("Error to load calendar: %v", err)
 	}

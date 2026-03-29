@@ -69,7 +69,7 @@ func main() {
 
 	//debug
 	if calendarStorage.IsAuthorized() {
-		events, err := calendarStorage.ListEvents(ctx, 5)
+		events, err := calendarStorage.ListEvents(context.Background(), time.Now().UTC(), time.Now().AddDate(0, 0, 5).UTC())
 		if err != nil {
 			log.Printf("Error listing events: %v", err)
 		}

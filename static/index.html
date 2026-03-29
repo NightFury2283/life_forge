@@ -79,17 +79,62 @@
                 </div>
             </div>
 
-            <!-- Calendar iframe (Yandex) -->
-            <div class="flex-1 bg-gray-50 overflow-hidden relative flex flex-col items-center justify-center text-center p-8">
-                <div class="text-5xl mb-4">📅</div>
-                <h3 class="text-lg font-bold text-gray-800 mb-2">Календарь Яндекса</h3>
-                <p class="text-sm text-gray-500 max-w-xs mb-6 mx-auto">
-                    События синхронизируются в фоне с вашим Яндекс.Календарем. Прямая вставка интерфейса Яндекса пока не поддерживается.
-                </p>
-                <a href="https://calendar.yandex.ru" target="_blank"
-                   class="px-5 py-2.5 bg-gray-900 text-white font-medium rounded-full shadow-md hover:bg-black transition-colors">
-                    Открыть в Яндекс Календарь
-                </a>
+            <!-- Custom Weekly Calendar UI -->
+            <div class="flex-1 bg-white overflow-hidden flex flex-col relative rounded-b-[2rem]" id="custom-calendar-container">
+                <!-- Controls Row -->
+                <div class="px-6 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+                    <div class="flex items-center gap-4">
+                        <h3 id="calendar-month-label" class="text-lg font-bold text-gray-800 capitalize">Календарь</h3>
+                        <div class="flex items-center bg-white rounded-lg border border-gray-200 shadow-sm ml-2">
+                            <button id="prev-week-btn" class="px-3 py-1.5 hover:bg-gray-50 text-gray-500 hover:text-gray-900 border-r border-gray-200 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                            </button>
+                            <button id="today-week-btn" class="px-4 py-1.5 text-sm font-medium hover:bg-gray-50 transition-colors text-gray-700">Сегодня</button>
+                            <button id="next-week-btn" class="px-3 py-1.5 hover:bg-gray-50 text-gray-500 hover:text-gray-900 border-l border-gray-200 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <a href="https://calendar.yandex.ru" target="_blank" class="px-4 py-1.5 bg-gray-900 text-white text-sm font-medium rounded-full shadow-sm hover:bg-black transition-colors flex items-center gap-2">
+                        Открыть в Яндекс
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                    </a>
+                </div>
+
+                <!-- Calendar Grid -->
+                <div class="flex flex-col flex-1 overflow-hidden relative">
+                    <!-- Loading overlay -->
+                    <div id="calendar-loader" class="absolute inset-0 bg-white/70 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+                        <div class="flex space-x-1">
+                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0s"></div>
+                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
+                        </div>
+                    </div>
+
+                    <!-- Days Header -->
+                    <div id="calendar-days-header" class="flex border-b border-gray-200 bg-white z-20">
+                        <div class="w-14 flex-shrink-0 border-r border-gray-100 bg-white"></div>
+                        <div id="calendar-days-row" class="flex flex-1">
+                            <!-- 7 Days JS injected -->
+                        </div>
+                    </div>
+
+                    <!-- Scrollable Body -->
+                    <div id="calendar-scroll-area" class="flex-1 overflow-y-auto relative bg-[#fafafa]">
+                        <div class="flex relative min-h-[1440px]">
+                            <!-- Time Axis -->
+                            <div class="w-14 flex-shrink-0 border-r border-gray-100 bg-white relative z-10" id="calendar-time-axis"></div>
+                            
+                            <!-- Columns Container -->
+                            <div id="calendar-columns-container" class="flex flex-1 relative bg-white">
+                                <!-- Grid Lines Background -->
+                                <div class="absolute inset-0 z-0 pointer-events-none" id="calendar-grid-bg"></div>
+                                <!-- 7 Columns JS injected -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Gamification Floating Button -->
@@ -234,9 +279,8 @@
         }
 
         function refreshCalendar() {
-            const iframe = document.getElementById('google-calendar');
-            if (iframe) {
-                iframe.src = iframe.src.split('&refresh=')[0] + '&refresh=' + new Date().getTime();
+            if (typeof loadCalendarWeek === 'function') {
+                loadCalendarWeek(currentDateOffset);
             }
         }
 
@@ -259,7 +303,135 @@
                     }
                 });
             }
+
+            initCustomCalendar();
         });
+
+        // === Custom Calendar Logic ===
+        let currentDateOffset = 0; // weeks from today
+
+        function initCustomCalendar() {
+            renderTimeAxis();
+            renderGridBackground();
+            loadCalendarWeek(currentDateOffset);
+
+            document.getElementById('prev-week-btn').addEventListener('click', () => { currentDateOffset--; loadCalendarWeek(currentDateOffset); });
+            document.getElementById('next-week-btn').addEventListener('click', () => { currentDateOffset++; loadCalendarWeek(currentDateOffset); });
+            document.getElementById('today-week-btn').addEventListener('click', () => { currentDateOffset = 0; loadCalendarWeek(currentDateOffset); });
+        }
+
+        function getStartOfWeek(date) {
+            const result = new Date(date);
+            const day = result.getDay();
+            const diff = result.getDate() - day + (day === 0 ? -6 : 1);
+            result.setDate(diff);
+            result.setHours(0, 0, 0, 0);
+            return result;
+        }
+
+        function renderTimeAxis() {
+            const axis = document.getElementById('calendar-time-axis');
+            axis.innerHTML = '';
+            for (let i = 1; i < 24; i++) {
+                const hourDiv = document.createElement('div');
+                hourDiv.className = 'absolute w-full text-right pr-2 text-xs text-gray-400 font-mono transform -translate-y-1/2';
+                hourDiv.style.top = `${i * 60}px`;
+                hourDiv.textContent = `${i.toString().padStart(2, '0')}:00`;
+                axis.appendChild(hourDiv);
+            }
+        }
+
+        function renderGridBackground() {
+            const bg = document.getElementById('calendar-grid-bg');
+            bg.innerHTML = '';
+            for (let i = 1; i < 24; i++) {
+                const line = document.createElement('div');
+                line.className = 'absolute w-full border-b border-gray-50';
+                line.style.top = `${i * 60}px`;
+                bg.appendChild(line);
+            }
+        }
+
+        async function loadCalendarWeek(weekOffset) {
+            document.getElementById('calendar-loader').classList.remove('hidden');
+
+            const now = new Date();
+            const targetWeekDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (weekOffset * 7));
+            const startOfWeek = getStartOfWeek(targetWeekDate);
+            
+            const endOfWeek = new Date(startOfWeek);
+            endOfWeek.setDate(endOfWeek.getDate() + 7);
+
+            const monthNames = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+            document.getElementById('calendar-month-label').textContent = `${monthNames[startOfWeek.getMonth()]} ${startOfWeek.getFullYear()}`;
+
+            const daysRow = document.getElementById('calendar-days-row');
+            daysRow.innerHTML = '';
+            const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+            
+            for (let i = 0; i < 7; i++) {
+                const colDate = new Date(startOfWeek);
+                colDate.setDate(colDate.getDate() + i);
+                
+                const isToday = colDate.toDateString() === new Date().toDateString();
+                const dayHeader = document.createElement('div');
+                dayHeader.className = `flex-1 py-3 text-center border-r border-gray-100 ${isToday ? 'bg-blue-50/50' : 'bg-white'}`;
+                
+                dayHeader.innerHTML = `
+                    <div class="text-xs uppercase tracking-wider text-gray-500 font-semibold">${dayNames[i]}</div>
+                    <div class="text-xl font-medium ${isToday ? 'text-blue-600' : 'text-gray-900'} mt-0.5">${colDate.getDate()}</div>
+                `;
+                daysRow.appendChild(dayHeader);
+            }
+
+            const colsContainer = document.getElementById('calendar-columns-container');
+            const bgLines = document.getElementById('calendar-grid-bg');
+            colsContainer.innerHTML = '';
+            colsContainer.appendChild(bgLines);
+
+            for (let i = 0; i < 7; i++) {
+                const col = document.createElement('div');
+                col.className = 'flex-1 border-r border-gray-100 relative';
+                col.id = `col-day-${i}`;
+                colsContainer.appendChild(col);
+            }
+
+            try {
+                const res = await fetch(`/api/gantt?start=${startOfWeek.toISOString()}&end=${endOfWeek.toISOString()}`);
+                if (!res.ok) throw new Error('Failed to fetch events');
+                const events = await res.json();
+                
+                if (events && events.length > 0) {
+                    events.forEach(ev => {
+                        const evtStart = new Date(ev.start_time);
+                        const evtEnd = new Date(ev.end_time);
+                        
+                        if (evtEnd <= startOfWeek || evtStart >= endOfWeek) return;
+
+                        const startDayOffset = Math.floor((evtStart - startOfWeek) / (24 * 60 * 60 * 1000));
+                        if(startDayOffset >= 0 && startDayOffset <= 6) {
+                            const startMins = evtStart.getHours() * 60 + evtStart.getMinutes();
+                            let durationMins = (evtEnd - evtStart) / (60 * 1000);
+                            if (durationMins < 30) durationMins = 30;
+
+                            const el = document.createElement('div');
+                            el.className = 'absolute inset-x-1 mx-1 bg-red-100/90 hover:bg-red-200/90 border-l-4 border-red-500 rounded text-xs p-1.5 overflow-hidden transition-colors shadow-sm animate-slide-in cursor-pointer z-20 hover:z-30';
+                            el.style.top = `${startMins}px`;
+                            el.style.height = `${durationMins}px`;
+                            el.innerHTML = `<div class="font-semibold text-red-900 truncate leading-tight">${ev.title}</div>
+                                          <div class="text-red-700/80 text-[10px] mt-0.5">${evtStart.getHours().toString().padStart(2,'0')}:${evtStart.getMinutes().toString().padStart(2,'0')}</div>`;
+                            
+                            const col = document.getElementById(`col-day-${startDayOffset}`);
+                            if(col) col.appendChild(el);
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error(err);
+            } finally {
+                document.getElementById('calendar-loader').classList.add('hidden');
+            }
+        }
     </script>
 </body>
 </html>
