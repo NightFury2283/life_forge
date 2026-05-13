@@ -8,32 +8,63 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* Custom scrollbar */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-        
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+        ::-webkit-scrollbar {
+            width: 6px;
         }
-        .animate-slide-in { animation: slideIn 0.3s ease-out; }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-slide-in {
+            animation: slideIn 0.3s ease-out;
+        }
 
         /* The drag handle */
-        #resizer { cursor: col-resize; transition: background 0.2s; }
-        #resizer:hover, #resizer.active { background: #9ca3af; } /* gray-400 */
+        #resizer {
+            cursor: col-resize;
+            transition: background 0.2s;
+        }
+
+        #resizer:hover,
+        #resizer.active {
+            background: #9ca3af;
+        }
+
+        /* gray-400 */
     </style>
 </head>
 
 <body class="bg-gray-100 h-screen w-screen overflow-hidden flex font-sans text-gray-800 selection:bg-blue-200">
-    
+
     <!-- Outer padding wrapper -->
     <div class="flex w-full h-full p-6 relative gap-4" id="main-container">
 
         <!-- LEFT PANEL: CHAT CARD -->
-        <div id="chat-panel" class="bg-white rounded-[2rem] shadow-xl border border-gray-200 flex flex-col overflow-hidden relative" style="width: 45%; min-width: 30%;">
-            
+        <div id="chat-panel"
+            class="bg-white rounded-[2rem] shadow-xl border border-gray-200 flex flex-col overflow-hidden relative"
+            style="width: 45%; min-width: 30%;">
+
             <!-- Header -->
-            <div class="px-8 py-5 border-b border-gray-100 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-between">
+            <div
+                class="px-8 py-5 border-b border-gray-100 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-between">
                 <h1 class="text-xl font-bold font-mono tracking-tight text-gray-900">Life-Forge AI</h1>
                 <p class="text-xs text-gray-400">
                     <a href="/auth/google" class="hover:text-blue-500 underline transition-colors">Google Auth</a>
@@ -47,36 +78,50 @@
 
             <!-- Input Area -->
             <div class="p-6 bg-white border-t border-gray-100 relative z-10">
-                <div class="flex items-center bg-gray-50 border border-gray-200 rounded-full p-2 pr-2.5 shadow-sm focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-400 transition-all">
-                    <input id="user-message" type="text" placeholder="Привет, я ИИ и помогу тебе с планированием. Только напиши!"
+                <div
+                    class="flex items-center bg-gray-50 border border-gray-200 rounded-full p-2 pr-2.5 shadow-sm focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-400 transition-all">
+                    <input id="user-message" type="text"
+                        placeholder="Привет, я ИИ и помогу тебе с планированием. Только напиши!"
                         class="flex-1 px-4 py-2.5 bg-transparent border-none focus:outline-none text-gray-700 placeholder-gray-400"
                         autocomplete="off">
-                    
+
                     <button id="send-button" type="button"
                         class="p-3 bg-gray-900 text-white rounded-full hover:bg-black transition-transform transform active:scale-95 flex items-center justify-center">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                        </svg>
                     </button>
                 </div>
             </div>
         </div>
 
         <!-- DRAG RESIZER -->
-        <div id="resizer" class="w-1.5 bg-gray-200 hover:bg-gray-300 rounded-full flex-shrink-0 relative group flex items-center justify-center h-20 self-center transition-colors">
+        <div id="resizer"
+            class="w-1.5 bg-gray-200 hover:bg-gray-300 rounded-full flex-shrink-0 relative group flex items-center justify-center h-20 self-center transition-colors">
             <div class="w-1 h-8 rounded bg-gray-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
         </div>
 
         <!-- RIGHT PANEL: CALENDAR CARD -->
-        <div id="calendar-panel" class="bg-white rounded-[2rem] shadow-xl border border-gray-200 flex flex-col overflow-hidden relative" style="width: 55%; min-width: 30%;">
-            
+        <div id="calendar-panel"
+            class="bg-white rounded-[2rem] shadow-xl border border-gray-200 flex flex-col overflow-hidden relative"
+            style="width: 55%; min-width: 30%;">
+
             <!-- Header -->
-            <div class="px-8 py-5 border-b border-gray-100 bg-white/50 backdrop-blur-sm relative z-[70] flex items-center justify-between">
+            <div
+                class="px-8 py-5 border-b border-gray-100 bg-white/50 backdrop-blur-sm relative z-[70] flex items-center justify-between">
                 <div class="relative group z-30" id="calendar-dropdown-container">
-                    <button class="flex items-center gap-2 text-xl font-bold font-mono tracking-tight text-gray-900 hover:text-gray-700 transition">
+                    <button
+                        class="flex items-center gap-2 text-xl font-bold font-mono tracking-tight text-gray-900 hover:text-gray-700 transition">
                         Google Calendar
-                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7">
+                            </path>
+                        </svg>
                     </button>
                     <!-- Dropdown -->
-                    <div class="absolute left-0 top-full mt-2 w-72 bg-white border border-gray-100 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[100]">
+                    <div
+                        class="absolute left-0 top-full mt-2 w-72 bg-white border border-gray-100 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[100]">
                         <div class="p-2 max-h-64 overflow-y-auto" id="calendar-list">
                             <div class="text-sm text-gray-500 text-center py-2">Загрузка...</div>
                         </div>
@@ -84,25 +129,36 @@
                 </div>
                 <div class="flex items-center gap-3">
                     <a href="/static/calendar.html" target="_blank" id="gantt-link"
-                       class="px-4 py-1.5 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 text-sm font-semibold transition-colors flex items-center gap-2">
-                        📊 Диаграмма Ганта
+                        class="px-4 py-1.5 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 text-sm font-semibold transition-colors flex items-center gap-2">
+                        📊 Ближайшие события
                     </a>
                 </div>
             </div>
 
             <!-- Custom Weekly Calendar UI -->
-            <div class="flex-1 bg-white overflow-hidden flex flex-col relative rounded-b-[2rem]" id="custom-calendar-container">
+            <div class="flex-1 bg-white overflow-hidden flex flex-col relative rounded-b-[2rem]"
+                id="custom-calendar-container">
                 <!-- Controls Row -->
-                <div class="px-6 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 relative z-[60]">
+                <div
+                    class="px-6 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 relative z-[60]">
                     <div class="flex items-center gap-4">
                         <h3 id="calendar-month-label" class="text-lg font-bold text-gray-800 capitalize">Календарь</h3>
                         <div class="flex items-center bg-white rounded-lg border border-gray-200 shadow-sm ml-2">
-                            <button id="prev-week-btn" class="px-3 py-1.5 hover:bg-gray-50 text-gray-500 hover:text-gray-900 border-r border-gray-200 transition-colors">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                            <button id="prev-week-btn"
+                                class="px-3 py-1.5 hover:bg-gray-50 text-gray-500 hover:text-gray-900 border-r border-gray-200 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M15 19l-7-7 7-7"></path>
+                                </svg>
                             </button>
-                            <button id="today-week-btn" class="px-4 py-1.5 text-sm font-medium hover:bg-gray-50 transition-colors text-gray-700">Сегодня</button>
-                            <button id="next-week-btn" class="px-3 py-1.5 hover:bg-gray-50 text-gray-500 hover:text-gray-900 border-l border-gray-200 transition-colors">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            <button id="today-week-btn"
+                                class="px-4 py-1.5 text-sm font-medium hover:bg-gray-50 transition-colors text-gray-700">Сегодня</button>
+                            <button id="next-week-btn"
+                                class="px-3 py-1.5 hover:bg-gray-50 text-gray-500 hover:text-gray-900 border-l border-gray-200 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9 5l7 7-7 7"></path>
+                                </svg>
                             </button>
                         </div>
                     </div>
@@ -111,11 +167,15 @@
                 <!-- Calendar Grid -->
                 <div class="flex flex-col flex-1 overflow-hidden relative">
                     <!-- Loading overlay -->
-                    <div id="calendar-loader" class="absolute inset-0 bg-white/70 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+                    <div id="calendar-loader"
+                        class="absolute inset-0 bg-white/70 backdrop-blur-sm z-50 flex items-center justify-center hidden">
                         <div class="flex space-x-1">
-                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0s"></div>
-                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
-                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
+                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0s">
+                            </div>
+                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.2s">
+                            </div>
+                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.4s">
+                            </div>
                         </div>
                     </div>
 
@@ -131,8 +191,9 @@
                     <div id="calendar-scroll-area" class="flex-1 overflow-y-auto relative bg-[#fafafa]">
                         <div class="flex relative min-h-[1440px]">
                             <!-- Time Axis -->
-                            <div class="w-14 flex-shrink-0 border-r border-gray-100 bg-white relative z-10" id="calendar-time-axis"></div>
-                            
+                            <div class="w-14 flex-shrink-0 border-r border-gray-100 bg-white relative z-10"
+                                id="calendar-time-axis"></div>
+
                             <!-- Columns Container -->
                             <div id="calendar-columns-container" class="flex flex-1 relative bg-white">
                                 <!-- Grid Lines Background -->
@@ -144,24 +205,38 @@
                 </div>
             </div>
 
-            <!-- Gamification Floating Button -->
-            <button class="absolute bottom-6 right-6 px-6 py-2.5 bg-white border-2 border-gray-900 rounded-full shadow-lg font-bold text-gray-900 hover:bg-gray-50 transition-transform hover:-translate-y-1 active:scale-95 z-20">
-                Gamification
-            </button>
+            <!-- Gamification Floating Button - обновлённый стиль -->
+            <a href="/game.html"
+                class="absolute bottom-6 right-6 px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-full shadow-lg font-bold text-white hover:shadow-xl hover:scale-105 transition-all duration-300 flex items-center gap-2 z-20 group">
+                <svg class="w-5 h-5 group-hover:rotate-12 transition-transform" fill="none" stroke="currentColor"
+                    viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                🎮 Геймификация
+            </a>
         </div>
 
     </div>
 
     <!-- Event Details Tooltip -->
-    <div id="event-tooltip" class="absolute hidden z-[200] bg-white border border-gray-100 rounded-xl shadow-2xl p-5 w-72 transform transition-opacity duration-200 opacity-0 pointer-events-none">
+    <div id="event-tooltip"
+        class="absolute hidden z-[200] bg-white border border-gray-100 rounded-xl shadow-2xl p-5 w-72 transform transition-opacity duration-200 opacity-0 pointer-events-none">
         <div class="flex justify-between items-start gap-3">
             <h4 id="tooltip-title" class="font-bold text-gray-900 leading-snug"></h4>
-            <button id="tooltip-close" class="text-gray-400 hover:text-gray-600 transition-colors pointer-events-auto flex-shrink-0 bg-gray-50 hover:bg-gray-100 p-1 rounded-full">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            <button id="tooltip-close"
+                class="text-gray-400 hover:text-gray-600 transition-colors pointer-events-auto flex-shrink-0 bg-gray-50 hover:bg-gray-100 p-1 rounded-full">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                    </path>
+                </svg>
             </button>
         </div>
         <div class="flex items-center gap-2 mt-3 text-sm text-gray-500 font-medium">
-            <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
             <span id="tooltip-time"></span>
         </div>
     </div>
@@ -188,13 +263,13 @@
 
             document.getElementById('tooltip-title').textContent = title;
             document.getElementById('tooltip-time').textContent = timeStr;
-            
+
             tooltip.classList.remove('hidden');
-            
+
             let rect = e.currentTarget.getBoundingClientRect();
             let topPosition = rect.bottom + window.scrollY + 8;
             let leftPosition = rect.left + window.scrollX;
-            
+
             tooltip.style.top = `${topPosition}px`;
             tooltip.style.left = `${leftPosition}px`;
 
@@ -222,20 +297,20 @@
 
         let isResizing = false;
 
-        resizer.addEventListener('mousedown', function(e) {
+        resizer.addEventListener('mousedown', function (e) {
             isResizing = true;
             resizer.classList.add('active');
             document.body.style.cursor = 'col-resize';
             document.getElementById('google-calendar').style.pointerEvents = 'none'; // Prevent iframe capturing mouse
         });
 
-        document.addEventListener('mousemove', function(e) {
+        document.addEventListener('mousemove', function (e) {
             if (!isResizing) return;
             const containerRect = container.getBoundingClientRect();
             // Substract padding left (24px gap is handled by flex math)
-            let newLeftWidth = e.clientX - containerRect.left - 24; 
-            
-            if (newLeftWidth < parseInt(containerRect.width * 0.3)) newLeftWidth = parseInt(containerRect.width * 0.3); 
+            let newLeftWidth = e.clientX - containerRect.left - 24;
+
+            if (newLeftWidth < parseInt(containerRect.width * 0.3)) newLeftWidth = parseInt(containerRect.width * 0.3);
             if (newLeftWidth > containerRect.width - parseInt(containerRect.width * 0.3)) newLeftWidth = containerRect.width - parseInt(containerRect.width * 0.3);
 
             const percentage = (newLeftWidth / containerRect.width) * 100;
@@ -243,7 +318,7 @@
             rightPanel.style.width = `calc(${100 - percentage}% - 12px)`;
         });
 
-        document.addEventListener('mouseup', function(e) {
+        document.addEventListener('mouseup', function (e) {
             if (isResizing) {
                 isResizing = false;
                 resizer.classList.remove('active');
@@ -388,7 +463,7 @@
                     const cals = await res.json();
                     const listDiv = document.getElementById('calendar-list');
                     listDiv.innerHTML = '';
-                    
+
                     let savedStr = localStorage.getItem('life_forge_cals');
                     let savedIds = savedStr ? JSON.parse(savedStr) : null;
 
@@ -404,11 +479,11 @@
                             </label>
                         `;
                     });
-                    
+
                     document.querySelectorAll('.calendar-checkbox').forEach(cb => {
                         cb.addEventListener('change', updateActiveCalendars);
                     });
-                    
+
                     updateActiveCalendars();
                 }
             } catch (err) {
@@ -490,7 +565,7 @@
             const now = new Date();
             const targetWeekDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (weekOffset * 7));
             const startOfWeek = getStartOfWeek(targetWeekDate);
-            
+
             const endOfWeek = new Date(startOfWeek);
             endOfWeek.setDate(endOfWeek.getDate() + 7);
 
@@ -500,15 +575,15 @@
             const daysRow = document.getElementById('calendar-days-row');
             daysRow.innerHTML = '';
             const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-            
+
             for (let i = 0; i < 7; i++) {
                 const colDate = new Date(startOfWeek);
                 colDate.setDate(colDate.getDate() + i);
-                
+
                 const isToday = colDate.toDateString() === new Date().toDateString();
                 const dayHeader = document.createElement('div');
                 dayHeader.className = `flex-1 min-w-0 w-0 py-2 flex flex-col items-center border-r border-gray-100 ${isToday ? 'bg-blue-50/50' : 'bg-white'}`;
-                
+
                 dayHeader.innerHTML = `
                     <div class="text-xs uppercase tracking-wider text-gray-500 font-semibold">${dayNames[i]}</div>
                     <div class="text-xl font-medium ${isToday ? 'text-blue-600' : 'text-gray-900'} mt-0.5 mb-1">${colDate.getDate()}</div>
@@ -537,14 +612,14 @@
                 const res = await fetch(listUrl);
                 if (!res.ok) throw new Error('Failed to fetch events');
                 const events = await res.json();
-                
+
                 if (events && events.length > 0) {
                     let dailyEvents = [[], [], [], [], [], [], []];
 
                     events.forEach(ev => {
                         let evtStart = new Date(ev.start_time);
                         let evtEnd = new Date(ev.end_time);
-                        
+
                         if (evtEnd <= startOfWeek || evtStart >= endOfWeek) return;
 
                         let durationMins = (evtEnd - evtStart) / (60 * 1000);
@@ -562,12 +637,12 @@
                                     el.textContent = ev.name;
                                     el.addEventListener('click', (e) => showTooltip(e, ev.name, `Весь день`));
                                     const container = document.getElementById(`allday-col-${targetCol}`);
-                                    if(container) container.appendChild(el);
+                                    if (container) container.appendChild(el);
                                 }
                             }
                         } else {
                             const startDayOffset = Math.floor((evtStart - startOfWeek) / (24 * 60 * 60 * 1000));
-                            if(startDayOffset >= 0 && startDayOffset <= 6) {
+                            if (startDayOffset >= 0 && startDayOffset <= 6) {
                                 const startMins = evtStart.getHours() * 60 + evtStart.getMinutes();
                                 if (durationMins <= 0 || isNaN(durationMins)) durationMins = 30; // fallback
                                 dailyEvents[startDayOffset].push({ ev, startMins, durationMins, evtStart, evtEnd });
@@ -577,7 +652,7 @@
 
                     for (let d = 0; d < 7; d++) {
                         let dayEvts = dailyEvents[d];
-                        dayEvts.sort((a,b) => a.startMins - b.startMins);
+                        dayEvts.sort((a, b) => a.startMins - b.startMins);
 
                         for (let i = 0; i < dayEvts.length; i++) {
                             let curr = dayEvts[i];
@@ -596,13 +671,13 @@
 
                             let pos = overlaps.indexOf(i);
                             let total = overlaps.length;
-                            
+
                             let widthPct = 100 / total;
                             let leftPct = pos * widthPct;
 
                             const el = document.createElement('div');
                             el.className = 'absolute border-l-4 rounded text-xs p-1.5 overflow-hidden transition-all shadow-sm animate-slide-in cursor-pointer z-20 hover:z-30';
-                            
+
                             if (pos % 2 === 0) {
                                 el.classList.add('bg-red-100/90', 'hover:bg-red-200/90', 'border-red-500');
                             } else {
@@ -614,16 +689,16 @@
                             el.style.left = `calc(${leftPct}% + 4px)`;
                             el.style.width = `calc(${widthPct}% - 8px)`;
 
-                            let stStr = `${curr.evtStart.getHours().toString().padStart(2,'0')}:${curr.evtStart.getMinutes().toString().padStart(2,'0')}`;
-                            let endStr = `${curr.evtEnd.getHours().toString().padStart(2,'0')}:${curr.evtEnd.getMinutes().toString().padStart(2,'0')}`;
+                            let stStr = `${curr.evtStart.getHours().toString().padStart(2, '0')}:${curr.evtStart.getMinutes().toString().padStart(2, '0')}`;
+                            let endStr = `${curr.evtEnd.getHours().toString().padStart(2, '0')}:${curr.evtEnd.getMinutes().toString().padStart(2, '0')}`;
 
                             el.innerHTML = `<div class="font-semibold text-gray-900 truncate leading-tight">${curr.ev.name}</div>
                                           <div class="text-gray-600 font-mono text-[9px] mt-0.5">${stStr}</div>`;
-                            
+
                             el.addEventListener('click', (e) => showTooltip(e, curr.ev.name, `${stStr} - ${endStr}`));
 
                             const col = document.getElementById(`col-day-${d}`);
-                            if(col) col.appendChild(el);
+                            if (col) col.appendChild(el);
                         }
                     }
                 }
@@ -633,9 +708,10 @@
                 document.getElementById('calendar-loader').classList.add('hidden');
             }
         }
-        
+
         // initialize visual layout once
         initCustomCalendar();
     </script>
 </body>
+
 </html>
