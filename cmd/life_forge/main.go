@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"life_forge/internal/ai"
 	"life_forge/internal/config"
 	"life_forge/internal/handlers"
@@ -9,7 +11,9 @@ import (
 	"life_forge/internal/storage"
 	"log"
 	"net/http"
+	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -93,7 +97,7 @@ func main() {
 
 	router.register(mux)
 
-	handler := corsMiddleware(mux)
+	handler := setupMiddleware(corsMiddleware(mux))
 
 	srv := &http.Server{
 		Addr:    ":8080",
@@ -197,8 +201,111 @@ func (router *Router) register(mux *http.ServeMux) {
 		}
 	})
 
-	// Добавь страницу геймификации
 	mux.HandleFunc("/game.html", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "static/game.html")
+	})
+
+	mux.HandleFunc("/setup", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "static/setup.html")
+	})
+
+	mux.HandleFunc("/api/check-google", func(w http.ResponseWriter, r *http.Request) {
+		// Проверяем наличие credentials.json
+		_, err := os.Stat("credentials.json")
+		response := map[string]interface{}{
+			"ok":         err == nil,
+			"authorized": router.calendarHandler.CalendarStorage.IsAuthorized(),
+		}
+		json.NewEncoder(w).Encode(response)
+	})
+
+	mux.HandleFunc("/api/check-gigachat", func(w http.ResponseWriter, r *http.Request) {
+		var req struct{ Key string }
+		json.NewDecoder(r.Body).Decode(&req)
+
+		// Проверяем ключ GigaChat (делаем тестовый запрос)
+		client := ai.NewGigaChatClient(req.Key)
+		_, err := client.Generate(r.Context(), "Привет")
+
+		response := map[string]interface{}{"ok": err == nil}
+		if err != nil {
+			response["error"] = err.Error()
+		}
+		json.NewEncoder(w).Encode(response)
+	})
+
+	mux.HandleFunc("/api/check-db", func(w http.ResponseWriter, r *http.Request) {
+		var config struct {
+			Host, Port, User, Password, Dbname string
+		}
+		json.NewDecoder(r.Body).Decode(&config)
+
+		dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
+			config.User, config.Password, config.Host, config.Port, config.Dbname)
+
+		pool, err := pgxpool.New(r.Context(), dsn)
+		response := map[string]interface{}{"ok": err == nil}
+		if err != nil {
+			response["error"] = err.Error()
+		} else {
+			pool.Close()
+		}
+		json.NewEncoder(w).Encode(response)
+	})
+
+	mux.HandleFunc("/api/save-config", func(w http.ResponseWriter, r *http.Request) {
+		var cfg struct {
+			DB struct {
+				Host, Port, User, Password, Dbname string
+			}
+			GigachatKey string
+		}
+		json.NewDecoder(r.Body).Decode(&cfg)
+
+		// Если пришёл пустой ключ, пробуем сохранить старый
+		gigachatKey := cfg.GigachatKey
+		if gigachatKey == "" {
+			// Читаем существующий .env
+			if data, err := os.ReadFile(".env"); err == nil {
+				lines := strings.Split(string(data), "\n")
+				for _, line := range lines {
+					if strings.HasPrefix(line, "GIGACHAT_AUTH_KEY=") {
+						gigachatKey = strings.TrimPrefix(line, "GIGACHAT_AUTH_KEY=")
+						break
+					}
+				}
+			}
+		}
+
+		envContent := fmt.Sprintf(`POSTGRES_DSN=postgres://%s:%s@%s:%s/%s?sslmode=disable
+GIGACHAT_AUTH_KEY=%s`,
+			cfg.DB.User, cfg.DB.Password, cfg.DB.Host, cfg.DB.Port, cfg.DB.Dbname,
+			gigachatKey)
+
+		err := os.WriteFile(".env", []byte(envContent), 0644)
+		if err != nil {
+			http.Error(w, "Failed to save", 500)
+			return
+		}
+
+		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+	})
+}
+
+// Проверка что настройка завершена (редирект на setup если нет)
+func setupMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/setup" || r.URL.Path == "/api/check-setup" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Проверяем есть ли .env
+		if _, err := os.Stat(".env"); os.IsNotExist(err) {
+			http.Redirect(w, r, "/setup", http.StatusFound)
+			return
+		}
+
+		next.ServeHTTP(w, r)
 	})
 }
