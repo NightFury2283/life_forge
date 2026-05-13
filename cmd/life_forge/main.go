@@ -17,9 +17,10 @@ import (
 )
 
 type Router struct {
-	chatHandler     *handlers.ChatHandler
-	authHandler     *handlers.AuthHandler
-	calendarHandler *handlers.CalendarHandler
+	chatHandler         *handlers.ChatHandler
+	authHandler         *handlers.AuthHandler
+	calendarHandler     *handlers.CalendarHandler
+	gamificationHandler *handlers.GamificationHandler
 }
 
 func corsMiddleware(next http.Handler) http.Handler {
@@ -59,6 +60,8 @@ func main() {
 		log.Fatal("unable to ping db", err)
 	}
 
+	userStorage := storage.NewUserStorage(pool)
+
 	contextStorage := storage.NewContextStorage(pool)
 
 	calendarStorage, err := storage.NewGoogleCalendarStorage(pool)
@@ -79,12 +82,14 @@ func main() {
 	}
 
 	chatHandler := handlers.NewChatHandler(contextStorage, ai_client, calendarStorage)
-	authHandler := handlers.NewAuthHandler(calendarStorage)
+	authHandler := handlers.NewAuthHandler(calendarStorage, userStorage)
 	calendarHandler := handlers.NewCalendarHandler(calendarStorage)
+	// Создаём gamification handler
+	gamificationHandler := handlers.NewGamificationHandler(userStorage, calendarStorage)
 
 	mux := http.NewServeMux()
 
-	router := newRouter(chatHandler, authHandler, calendarHandler)
+	router := newRouter(chatHandler, authHandler, calendarHandler, gamificationHandler)
 
 	router.register(mux)
 
@@ -127,29 +132,73 @@ func newRouter(
 	chatHandler *handlers.ChatHandler,
 	authHandler *handlers.AuthHandler,
 	calendarHandler *handlers.CalendarHandler,
+	gamificationHandler *handlers.GamificationHandler,
 ) *Router {
 	return &Router{
-		chatHandler:     chatHandler,
-		authHandler:     authHandler,
-		calendarHandler: calendarHandler,
+		chatHandler:         chatHandler,
+		authHandler:         authHandler,
+		calendarHandler:     calendarHandler,
+		gamificationHandler: gamificationHandler,
 	}
 }
 
-func (r *Router) register(mux *http.ServeMux) {
+func (router *Router) register(mux *http.ServeMux) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "static/index.html")
 	})
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
-	mux.HandleFunc("/chat", r.chatHandler.HandleChat)
-	mux.HandleFunc("/auth/google", r.authHandler.HandleGoogleLogin)
-	mux.HandleFunc("/auth/callback", r.authHandler.HandleGoogleCallback)
-	mux.HandleFunc("/api/gantt", r.calendarHandler.HandleGanttDiagramm)
-	mux.HandleFunc("/api/calendars", r.calendarHandler.HandleGetCalendars)
+	mux.HandleFunc("/chat", router.chatHandler.HandleChat)
+	mux.HandleFunc("/auth/google", router.authHandler.HandleGoogleLogin)
+	mux.HandleFunc("/auth/callback", router.authHandler.HandleGoogleCallback)
+	mux.HandleFunc("/api/gantt", router.calendarHandler.HandleGanttDiagramm)
+	mux.HandleFunc("/api/calendars", router.calendarHandler.HandleGetCalendars)
 
 	// Init storage context if needed
 	//initStorageContext(ctx, storage)
 
 	//mux.HandleFunc("/entry", handler.HandleCreateEntry)
 	//mux.HandleFunc("/entries", handler.HandleGetEntries)
+
+	//gamification
+	mux.HandleFunc("/api/profile", router.gamificationHandler.HandleGetProfile)
+	mux.HandleFunc("/api/stats", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			router.gamificationHandler.HandleCreateStat(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/stats/", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPut:
+			router.gamificationHandler.HandleUpdateStat(w, r)
+		case http.MethodDelete:
+			router.gamificationHandler.HandleDeleteStat(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/tasks", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			router.gamificationHandler.HandleGetTasks(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/tasks/complete", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPost:
+			router.gamificationHandler.HandleCompleteTask(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// Добавь страницу геймификации
+	mux.HandleFunc("/game.html", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "static/game.html")
+	})
 }

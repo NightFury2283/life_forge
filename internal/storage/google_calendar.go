@@ -23,9 +23,10 @@ const (
 )
 
 type GoogleCalendarStorage struct {
-	service *calendar.Service
-	config  *oauth2.Config
-	pool    *pgxpool.Pool
+	service    *calendar.Service
+	config     *oauth2.Config
+	pool       *pgxpool.Pool
+	httpClient *http.Client
 }
 
 func NewGoogleCalendarStorage(pool *pgxpool.Pool) (*GoogleCalendarStorage, error) {
@@ -74,6 +75,7 @@ func (gcs *GoogleCalendarStorage) ExchangeCode(code string) error {
 	saveToken("token.json", tok)
 
 	client := gcs.config.Client(context.Background(), tok)
+	gcs.httpClient = client
 	service, err := calendar.NewService(context.Background(), option.WithHTTPClient(client))
 	if err != nil {
 		return fmt.Errorf("failed to create service: %w", err)
@@ -265,4 +267,28 @@ func (gcs *GoogleCalendarStorage) GetCalendarPreview(ctx context.Context, days i
 	}
 
 	return preview.String()
+}
+
+// ID текущего пользователя Google
+func (gcs *GoogleCalendarStorage) GetGoogleUserID(ctx context.Context) (string, error) {
+	if gcs.httpClient == nil {
+		return "", fmt.Errorf("HTTP client not initialized. Please authenticate first.")
+	}
+
+	resp, err := gcs.httpClient.Get("https://www.googleapis.com/oauth2/v2/userinfo")
+	if err != nil {
+		return "", fmt.Errorf("failed to get user info: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var userInfo struct {
+		ID    string `json:"id"`
+		Email string `json:"email"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
+		return "", fmt.Errorf("failed to decode user info: %w", err)
+	}
+
+	return userInfo.ID, nil
 }
