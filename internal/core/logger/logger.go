@@ -1,0 +1,83 @@
+package core_logger
+
+import (
+	"context"
+	"fmt"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"os"
+	"path/filepath"
+	"time"
+)
+
+type Logger struct {
+	*zap.Logger
+	file *os.File
+}
+
+func FromContext(ctx context.Context) *Logger {
+	log, ok := ctx.Value("log").(*Logger)
+
+	if !ok {
+		panic("no loger in context")
+	}
+
+	return log
+}
+
+func NewLogger(logConfig Config) (*Logger, error) {
+	zapLvl := zap.NewAtomicLevel()
+	if err := zapLvl.UnmarshalText([]byte(logConfig.Level)); err != nil {
+		return nil, fmt.Errorf("error with unmarshaling logger level: %w", err)
+	}
+
+	if err := os.MkdirAll(logConfig.Folder, 0755); err != nil {
+		return nil, fmt.Errorf("mkdir log folder: %w", err)
+	}
+
+	timestamp := time.Now().UTC().Format("2006-01-02T15-04-05.000000")
+
+	logFilePath := filepath.Join(
+		logConfig.Folder,
+		fmt.Sprintf("%s.log", timestamp),
+	)
+
+	logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("open log file: %w", err)
+	}
+
+	zapConfig := zap.NewDevelopmentEncoderConfig()
+	zapConfig.EncodeTime = zapcore.TimeEncoderOfLayout("2006-01-02T15:04:05.000000")
+
+	//для ссылки на код в IDE
+	zapConfig.EncodeCaller = func(caller zapcore.EntryCaller, enc zapcore.PrimitiveArrayEncoder) {
+		enc.AppendString(caller.TrimmedPath())
+	}
+
+	zapEncoder := zapcore.NewConsoleEncoder(zapConfig)
+	core := zapcore.NewTee(
+		zapcore.NewCore(zapEncoder, zapcore.AddSync(os.Stdout), zapLvl),
+		zapcore.NewCore(zapEncoder, zapcore.AddSync(logFile), zapLvl),
+	)
+
+	zapLogger := zap.New(core, zap.AddCaller())
+
+	return &Logger{
+		Logger: zapLogger,
+		file:   logFile,
+	}, nil
+}
+
+func (l *Logger) Close() {
+	if err := l.file.Close(); err != nil {
+		fmt.Println("failed to close app logger: %w", err)
+	}
+}
+
+func (l *Logger) With(field ...zap.Field) *Logger {
+	return &Logger{
+		Logger: l.Logger.With(field...),
+		file:   l.file,
+	}
+}

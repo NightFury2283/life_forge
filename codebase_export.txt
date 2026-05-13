@@ -1,0 +1,3810 @@
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\static\calendar.html
+==================================================
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gantt Chart - LifeForge</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .gantt-grid {
+            display: grid;
+            grid-template-columns: 250px repeat(14, 1fr);
+            gap: 1px;
+            background-color: #e5e7eb;
+            border: 1px solid #e5e7eb;
+        }
+        .gantt-header {
+            background-color: #f9fafb;
+            font-weight: 600;
+            color: #4b5563;
+            text-align: center;
+            padding: 12px 8px;
+            font-size: 0.875rem;
+        }
+        .gantt-cell {
+            background-color: #ffffff;
+            padding: 12px;
+            position: relative;
+        }
+        .task-row {
+            display: contents;
+        }
+        
+        .task-name {
+            background-color: #ffffff;
+            padding: 16px;
+            font-weight: 500;
+            color: #1f2937;
+            border-bottom: 1px solid #f3f4f6;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            z-index: 10;
+        }
+
+        .task-tracks {
+            grid-column: 2 / span 14;
+            display: grid;
+            grid-template-columns: repeat(14, 1fr);
+            gap: 1px;
+            background-color: #ffffff;
+            border-bottom: 1px solid #f3f4f6;
+            position: relative;
+            padding-top: 10px;
+            padding-bottom: 10px;
+        }
+        
+        .task-bar {
+            background: linear-gradient(90deg, #0ea5e9, #3b82f6);
+            border-radius: 6px;
+            height: 32px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            z-index: 5;
+            animation: slideInBar 0.5s ease-out forwards;
+            opacity: 0;
+            transform-origin: left;
+        }
+
+        .task-bar:hover {
+            transform: scaleY(1.1);
+            filter: brightness(1.1);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        .today-marker {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 250px; /* Start after task name column */
+            width: 2px;
+            background-color: #ef4444;
+            opacity: 0.5;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        @keyframes slideInBar {
+            from {
+                opacity: 0;
+                transform: scaleX(0);
+            }
+            to {
+                opacity: 1;
+                transform: scaleX(1);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen p-8 text-gray-800 font-sans">
+
+    <div class="max-w-7xl mx-auto">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900 bg-clip-text text-transparent bg-gradient-to-r from-teal-600 to-blue-600">
+                    Диаграмма Ганта
+                </h1>
+                <p class="text-gray-500 mt-2">Ближайшие задачи на 14 дней</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <a href="/" class="px-5 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg shadow-sm font-medium hover:bg-gray-50 transition-colors flex items-center shadow-sm">
+                    ◀ На главную
+                </a>
+                <button onclick="fetchGanttData()" class="px-5 py-2.5 bg-emerald-600 text-white border border-emerald-700 rounded-lg shadow-sm font-medium hover:bg-emerald-700 transition-colors flex items-center gap-2 shadow-sm">
+                    🔄 Обновить
+                </button>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden relative" id="gantt-container">
+            <!-- Loading state -->
+            <div id="loading" class="absolute inset-0 bg-white/80 z-50 flex items-center justify-center backdrop-blur-sm">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600"></div>
+            </div>
+
+            <div class="overflow-x-auto pb-4">
+                <div id="gantt-chart" class="gantt-grid min-w-[1000px]">
+                    <!-- Header will be generated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const monthNames = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
+        const DAYS_TO_SHOW = 14;
+
+        document.addEventListener('DOMContentLoaded', fetchGanttData);
+
+        function normalizeDate(dateStr) {
+            const d = new Date(dateStr);
+            d.setHours(0, 0, 0, 0);
+            return d;
+        }
+
+        async function fetchGanttData() {
+            document.getElementById('loading').style.display = 'flex';
+            
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const calendars = urlParams.get('calendars');
+                let apiUrl = '/api/gantt';
+                if (calendars) {
+                    apiUrl += '?calendars=' + encodeURIComponent(calendars);
+                }
+                const response = await fetch(apiUrl);
+                if (!response.ok) throw new Error('Ошибка сервера');
+                
+                const tasks = await response.json() || [];
+                
+                // Sort by nearest completion
+                tasks.sort((a,b) => new Date(a.end_time) - new Date(b.end_time));
+
+                renderGantt(tasks);
+            } catch (error) {
+                console.error("Fetch error:", error);
+                document.getElementById('gantt-chart').innerHTML = `<div class="p-8 text-center text-red-500 col-span-15">Ошибка загрузки задач: ${error.message}</div>`;
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        function renderGantt(tasks) {
+            const chart = document.getElementById('gantt-chart');
+            chart.innerHTML = ''; // Clear
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            // 1. Render Header
+            let headerHTML = `<div class="gantt-header text-left pl-6 bg-gray-100 rounded-tl-xl border-b border-gray-200">Задача</div>`;
+            
+            for (let i = 0; i < DAYS_TO_SHOW; i++) {
+                const colDate = new Date(today);
+                colDate.setDate(today.getDate() + i);
+                
+                let dayStr = colDate.getDate();
+                // User asked to show month for today OR if it's the 1st of the month
+                if (i === 0 || colDate.getDate() === 1) {
+                    dayStr = `<span class="text-xs text-gray-400 font-medium uppercase tracking-wider block mb-1">${monthNames[colDate.getMonth()]}</span>${dayStr}`;
+                } else {
+                     dayStr = `<span class="text-xs text-transparent block mb-1">-</span>${dayStr}`; // Placeholder to keep height consistent
+                }
+
+                let classes = "gantt-header border-b border-gray-200 border-l border-white/50";
+                if (i === 0) classes += " text-blue-600 font-bold bg-blue-50/50"; // Highlight today column
+
+                headerHTML += `<div class="${classes}">${dayStr}</div>`;
+            }
+            chart.innerHTML += headerHTML;
+
+            if (tasks.length === 0) {
+                 chart.innerHTML += `<div class="p-8 text-center text-gray-500 font-medium" style="grid-column: 1 / -1;">Нет предстоящих задач</div>`;
+                 return;
+            }
+
+            // 2. Render Tasks
+            tasks.forEach((task, index) => {
+                const endDate = normalizeDate(task.end_time);
+                
+                // Calulcate difference in days and +1 to include the end date itself
+                const diffTime = endDate.getTime() - today.getTime();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                
+                // Constrain length between 1 and DAYS_TO_SHOW
+                let spanDays = diffDays + 1;
+                if (spanDays <= 0) spanDays = 1; // Minimum width is 1 day
+                if (spanDays > DAYS_TO_SHOW) spanDays = DAYS_TO_SHOW;
+
+                const rowHTML = `
+                    <div class="task-row group">
+                        <div class="task-name border-r border-gray-100 group-hover:bg-blue-50/30 transition-colors" title="${task.name}">
+                            ${task.name}
+                        </div>
+                        <div class="task-tracks group-hover:bg-blue-50/10 transition-colors px-1">
+                            ${spanDays > 0 ? `
+                                <div class="task-bar relative shadow-sm" 
+                                     style="grid-column: 1 / span ${spanDays}; animation-delay: ${index * 0.05}s"
+                                     title="${task.name} (до ${endDate.toLocaleDateString()})">
+                                     <div class="absolute inset-y-0 right-3 flex items-center text-white/90 text-xs font-medium opacity-0 hover:opacity-100 transition-opacity">
+                                         до ${endDate.getDate()}.${String(endDate.getMonth()+1).padStart(2,'0')}
+                                     </div>
+                                </div>
+                            ` : `<div style="grid-column: 1 / span 1;"></div>`}
+                        </div>
+                    </div>
+                `;
+                chart.innerHTML += rowHTML;
+            });
+        }
+    </script>
+</body>
+</html>
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\static\index.html
+==================================================
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LifeForge — AI Planner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-slide-in { animation: slideIn 0.3s ease-out; }
+
+        /* The drag handle */
+        #resizer { cursor: col-resize; transition: background 0.2s; }
+        #resizer:hover, #resizer.active { background: #9ca3af; } /* gray-400 */
+    </style>
+</head>
+
+<body class="bg-gray-100 h-screen w-screen overflow-hidden flex font-sans text-gray-800 selection:bg-blue-200">
+    
+    <!-- Outer padding wrapper -->
+    <div class="flex w-full h-full p-6 relative gap-4" id="main-container">
+
+        <!-- LEFT PANEL: CHAT CARD -->
+        <div id="chat-panel" class="bg-white rounded-[2rem] shadow-xl border border-gray-200 flex flex-col overflow-hidden relative" style="width: 45%; min-width: 30%;">
+            
+            <!-- Header -->
+            <div class="px-8 py-5 border-b border-gray-100 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-between">
+                <h1 class="text-xl font-bold font-mono tracking-tight text-gray-900">Life-Forge AI</h1>
+                <p class="text-xs text-gray-400">
+                    <a href="/auth/google" class="hover:text-blue-500 underline transition-colors">Google Auth</a>
+                </p>
+            </div>
+
+            <!-- Messages Area -->
+            <div id="messages" class="flex-1 p-8 overflow-y-auto space-y-6 bg-[#fcfcfc] flex flex-col">
+                <div class="text-center text-gray-400 py-8 text-sm">Начните общение с ИИ для планирования задач!</div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="p-6 bg-white border-t border-gray-100 relative z-10">
+                <div class="flex items-center bg-gray-50 border border-gray-200 rounded-full p-2 pr-2.5 shadow-sm focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-400 transition-all">
+                    <input id="user-message" type="text" placeholder="Привет, я ИИ и помогу тебе с планированием. Только напиши!"
+                        class="flex-1 px-4 py-2.5 bg-transparent border-none focus:outline-none text-gray-700 placeholder-gray-400"
+                        autocomplete="off">
+                    
+                    <button id="send-button" type="button"
+                        class="p-3 bg-gray-900 text-white rounded-full hover:bg-black transition-transform transform active:scale-95 flex items-center justify-center">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- DRAG RESIZER -->
+        <div id="resizer" class="w-1.5 bg-gray-200 hover:bg-gray-300 rounded-full flex-shrink-0 relative group flex items-center justify-center h-20 self-center transition-colors">
+            <div class="w-1 h-8 rounded bg-gray-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+        </div>
+
+        <!-- RIGHT PANEL: CALENDAR CARD -->
+        <div id="calendar-panel" class="bg-white rounded-[2rem] shadow-xl border border-gray-200 flex flex-col overflow-hidden relative" style="width: 55%; min-width: 30%;">
+            
+            <!-- Header -->
+            <div class="px-8 py-5 border-b border-gray-100 bg-white/50 backdrop-blur-sm relative z-[70] flex items-center justify-between">
+                <div class="relative group z-30" id="calendar-dropdown-container">
+                    <button class="flex items-center gap-2 text-xl font-bold font-mono tracking-tight text-gray-900 hover:text-gray-700 transition">
+                        Google Calendar
+                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <!-- Dropdown -->
+                    <div class="absolute left-0 top-full mt-2 w-72 bg-white border border-gray-100 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[100]">
+                        <div class="p-2 max-h-64 overflow-y-auto" id="calendar-list">
+                            <div class="text-sm text-gray-500 text-center py-2">Загрузка...</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <a href="/static/calendar.html" target="_blank" id="gantt-link"
+                       class="px-4 py-1.5 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 text-sm font-semibold transition-colors flex items-center gap-2">
+                        📊 Диаграмма Ганта
+                    </a>
+                </div>
+            </div>
+
+            <!-- Custom Weekly Calendar UI -->
+            <div class="flex-1 bg-white overflow-hidden flex flex-col relative rounded-b-[2rem]" id="custom-calendar-container">
+                <!-- Controls Row -->
+                <div class="px-6 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 relative z-[60]">
+                    <div class="flex items-center gap-4">
+                        <h3 id="calendar-month-label" class="text-lg font-bold text-gray-800 capitalize">Календарь</h3>
+                        <div class="flex items-center bg-white rounded-lg border border-gray-200 shadow-sm ml-2">
+                            <button id="prev-week-btn" class="px-3 py-1.5 hover:bg-gray-50 text-gray-500 hover:text-gray-900 border-r border-gray-200 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                            </button>
+                            <button id="today-week-btn" class="px-4 py-1.5 text-sm font-medium hover:bg-gray-50 transition-colors text-gray-700">Сегодня</button>
+                            <button id="next-week-btn" class="px-3 py-1.5 hover:bg-gray-50 text-gray-500 hover:text-gray-900 border-l border-gray-200 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Calendar Grid -->
+                <div class="flex flex-col flex-1 overflow-hidden relative">
+                    <!-- Loading overlay -->
+                    <div id="calendar-loader" class="absolute inset-0 bg-white/70 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+                        <div class="flex space-x-1">
+                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0s"></div>
+                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
+                        </div>
+                    </div>
+
+                    <!-- Days Header -->
+                    <div id="calendar-days-header" class="flex border-b border-gray-200 bg-white z-20">
+                        <div class="w-14 flex-shrink-0 border-r border-gray-100 bg-white"></div>
+                        <div id="calendar-days-row" class="flex flex-1">
+                            <!-- 7 Days JS injected -->
+                        </div>
+                    </div>
+
+                    <!-- Scrollable Body -->
+                    <div id="calendar-scroll-area" class="flex-1 overflow-y-auto relative bg-[#fafafa]">
+                        <div class="flex relative min-h-[1440px]">
+                            <!-- Time Axis -->
+                            <div class="w-14 flex-shrink-0 border-r border-gray-100 bg-white relative z-10" id="calendar-time-axis"></div>
+                            
+                            <!-- Columns Container -->
+                            <div id="calendar-columns-container" class="flex flex-1 relative bg-white">
+                                <!-- Grid Lines Background -->
+                                <div class="absolute inset-0 z-0 pointer-events-none" id="calendar-grid-bg"></div>
+                                <!-- 7 Columns JS injected -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gamification Floating Button -->
+            <button class="absolute bottom-6 right-6 px-6 py-2.5 bg-white border-2 border-gray-900 rounded-full shadow-lg font-bold text-gray-900 hover:bg-gray-50 transition-transform hover:-translate-y-1 active:scale-95 z-20">
+                Gamification
+            </button>
+        </div>
+
+    </div>
+
+    <!-- Event Details Tooltip -->
+    <div id="event-tooltip" class="absolute hidden z-[200] bg-white border border-gray-100 rounded-xl shadow-2xl p-5 w-72 transform transition-opacity duration-200 opacity-0 pointer-events-none">
+        <div class="flex justify-between items-start gap-3">
+            <h4 id="tooltip-title" class="font-bold text-gray-900 leading-snug"></h4>
+            <button id="tooltip-close" class="text-gray-400 hover:text-gray-600 transition-colors pointer-events-auto flex-shrink-0 bg-gray-50 hover:bg-gray-100 p-1 rounded-full">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <div class="flex items-center gap-2 mt-3 text-sm text-gray-500 font-medium">
+            <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <span id="tooltip-time"></span>
+        </div>
+    </div>
+
+    <!-- SCRIPT -->
+    <script>
+        // === Custom Event Tooltip Logic ===
+        function hideTooltip() {
+            const tooltip = document.getElementById('event-tooltip');
+            if (!tooltip) return;
+            tooltip.classList.remove('opacity-100');
+            tooltip.classList.add('opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                if (tooltip.classList.contains('opacity-0')) {
+                    tooltip.classList.add('hidden');
+                }
+            }, 200);
+        }
+
+        function showTooltip(e, title, timeStr) {
+            e.stopPropagation();
+            const tooltip = document.getElementById('event-tooltip');
+            if (!tooltip) return;
+
+            document.getElementById('tooltip-title').textContent = title;
+            document.getElementById('tooltip-time').textContent = timeStr;
+            
+            tooltip.classList.remove('hidden');
+            
+            let rect = e.currentTarget.getBoundingClientRect();
+            let topPosition = rect.bottom + window.scrollY + 8;
+            let leftPosition = rect.left + window.scrollX;
+            
+            tooltip.style.top = `${topPosition}px`;
+            tooltip.style.left = `${leftPosition}px`;
+
+            // Adjust if out of viewport
+            requestAnimationFrame(() => {
+                const tooltipRect = tooltip.getBoundingClientRect();
+                if (leftPosition + tooltipRect.width > window.innerWidth - 10) {
+                    leftPosition = window.innerWidth - tooltipRect.width - 20;
+                }
+                if (topPosition + tooltipRect.height > window.innerHeight - 10) {
+                    topPosition = rect.top + window.scrollY - tooltipRect.height - 8;
+                }
+                tooltip.style.left = `${Math.max(10, leftPosition)}px`;
+                tooltip.style.top = `${Math.max(10, topPosition)}px`;
+
+                tooltip.classList.remove('opacity-0');
+                tooltip.classList.add('opacity-100', 'pointer-events-auto');
+            });
+        }
+        // === Resizer Logic ===
+        const resizer = document.getElementById('resizer');
+        const leftPanel = document.getElementById('chat-panel');
+        const rightPanel = document.getElementById('calendar-panel');
+        const container = document.getElementById('main-container');
+
+        let isResizing = false;
+
+        resizer.addEventListener('mousedown', function(e) {
+            isResizing = true;
+            resizer.classList.add('active');
+            document.body.style.cursor = 'col-resize';
+            document.getElementById('google-calendar').style.pointerEvents = 'none'; // Prevent iframe capturing mouse
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!isResizing) return;
+            const containerRect = container.getBoundingClientRect();
+            // Substract padding left (24px gap is handled by flex math)
+            let newLeftWidth = e.clientX - containerRect.left - 24; 
+            
+            if (newLeftWidth < parseInt(containerRect.width * 0.3)) newLeftWidth = parseInt(containerRect.width * 0.3); 
+            if (newLeftWidth > containerRect.width - parseInt(containerRect.width * 0.3)) newLeftWidth = containerRect.width - parseInt(containerRect.width * 0.3);
+
+            const percentage = (newLeftWidth / containerRect.width) * 100;
+            leftPanel.style.width = `calc(${percentage}% - 12px)`; // Approx gap splitting
+            rightPanel.style.width = `calc(${100 - percentage}% - 12px)`;
+        });
+
+        document.addEventListener('mouseup', function(e) {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('active');
+                document.body.style.cursor = '';
+                document.getElementById('google-calendar').style.pointerEvents = 'auto';
+            }
+        });
+
+        // === Chat Logic ===
+        async function sendMessage(event) {
+            if (event) {
+                event.preventDefault();
+            }
+
+            const input = document.getElementById('user-message');
+            const message = input.value.trim();
+
+            if (!message) return;
+
+            showUserMessage(message);
+            input.value = '';
+
+            showLoading();
+
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => { controller.abort(); }, 15000); // 15s timeout
+
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: message }),
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ошибка ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.response) showBotMessage(data.response);
+                else if (data.message) showBotMessage(data.message);
+                else if (data.error) showBotMessage('Ошибка: ' + data.error);
+                else showBotMessage('Ответ: ' + JSON.stringify(data));
+
+                refreshCalendar();
+            } catch (error) {
+                let errorMessage = '❌ Ошибка соединения';
+                if (error.name === 'AbortError') errorMessage = '❌ Таймаут запроса';
+                showBotMessage(errorMessage);
+            } finally {
+                hideLoading();
+                input.focus();
+            }
+        }
+
+        function showUserMessage(message) {
+            const messages = document.getElementById('messages');
+            const userDiv = document.createElement('div');
+            // User message bubble
+            userDiv.className = 'message p-4 rounded-2xl rounded-tr-sm bg-gray-800 text-white self-end max-w-[85%] animate-slide-in shadow-sm';
+            userDiv.textContent = message;
+            messages.appendChild(userDiv);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function showBotMessage(message) {
+            const messages = document.getElementById('messages');
+            const botDiv = document.createElement('div');
+            // Bot message bubble
+            botDiv.className = 'message p-5 rounded-2xl rounded-tl-sm bg-white border border-gray-200 text-gray-800 self-start max-w-[85%] animate-slide-in shadow-sm leading-relaxed';
+            botDiv.innerHTML = `<div class="text-xs border-b border-gray-100 pb-2 mb-3 font-mono text-gray-400">🤖 LifeForge AI</div><div class="whitespace-pre-wrap">${message}</div>`;
+            messages.appendChild(botDiv);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function showLoading() {
+            const messages = document.getElementById('messages');
+            const loadingDiv = document.createElement('div');
+            loadingDiv.id = 'loading-indicator';
+            loadingDiv.className = 'message p-4 rounded-2xl rounded-tl-sm bg-white border border-gray-200 text-gray-800 self-start max-w-[85%] animate-slide-in shadow-sm flex items-center gap-3';
+            loadingDiv.innerHTML = `
+                <div class="flex space-x-1">
+                    <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0s"></div>
+                    <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                    <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
+                </div>
+                <span class="text-gray-400 text-sm">Печатает...</span>
+            `;
+            messages.appendChild(loadingDiv);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function hideLoading() {
+            const loadingDiv = document.getElementById('loading-indicator');
+            if (loadingDiv) loadingDiv.remove();
+        }
+
+        function refreshCalendar() {
+            const iframe = document.getElementById('google-calendar');
+            if (iframe) {
+                iframe.src = iframe.src.split('&refresh=')[0] + '&refresh=' + new Date().getTime();
+            }
+        }
+
+        // INIT
+        document.addEventListener('DOMContentLoaded', () => {
+            document.addEventListener('click', hideTooltip);
+            document.getElementById('tooltip-close')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                hideTooltip();
+            });
+
+            const input = document.getElementById('user-message');
+            const sendButton = document.getElementById('send-button');
+
+            if (input) input.focus();
+
+            if (sendButton) {
+                sendButton.addEventListener('click', sendMessage);
+            }
+
+            if (input) {
+                input.addEventListener('keypress', function (e) {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendMessage(e);
+                    }
+                });
+            }
+
+            fetchCalendars();
+        });
+
+        async function fetchCalendars() {
+            try {
+                const res = await fetch('/api/calendars');
+                if (res.ok) {
+                    const cals = await res.json();
+                    const listDiv = document.getElementById('calendar-list');
+                    listDiv.innerHTML = '';
+                    
+                    let savedStr = localStorage.getItem('life_forge_cals');
+                    let savedIds = savedStr ? JSON.parse(savedStr) : null;
+
+                    cals.forEach(cal => {
+                        let isChecked = savedIds !== null ? savedIds.includes(cal.id) : cal.primary;
+                        listDiv.innerHTML += `
+                            <label class="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg cursor-pointer">
+                                <input type="checkbox" value="${cal.id}" class="calendar-checkbox w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500" ${isChecked ? 'checked' : ''}>
+                                <div class="flex items-center gap-2 flex-1 min-w-0">
+                                    <div class="w-3 h-3 rounded-full flex-shrink-0" style="background-color: ${cal.backgroundColor}"></div>
+                                    <span class="text-sm font-medium text-gray-700 truncate">${cal.summary}</span>
+                                </div>
+                            </label>
+                        `;
+                    });
+                    
+                    document.querySelectorAll('.calendar-checkbox').forEach(cb => {
+                        cb.addEventListener('change', updateActiveCalendars);
+                    });
+                    
+                    updateActiveCalendars();
+                }
+            } catch (err) {
+                console.error("Failed to load calendars: ", err);
+            }
+        }
+
+        function refreshCalendar() {
+            if (typeof loadCalendarWeek === 'function') {
+                loadCalendarWeek(currentDateOffset);
+            }
+        }
+
+        let activeCalendars = [];
+        let currentDateOffset = 0; // weeks from today
+
+        function updateActiveCalendars() {
+            const checkboxes = document.querySelectorAll('.calendar-checkbox:checked');
+            activeCalendars = Array.from(checkboxes).map(cb => cb.value);
+
+            localStorage.setItem('life_forge_cals', JSON.stringify(activeCalendars));
+
+            const ganttLink = document.getElementById('gantt-link');
+            if (ganttLink) {
+                if (activeCalendars.length > 0) {
+                    ganttLink.href = "/static/calendar.html?calendars=" + encodeURIComponent(activeCalendars.join(','));
+                } else {
+                    ganttLink.href = "/static/calendar.html";
+                }
+            }
+
+            loadCalendarWeek(currentDateOffset);
+        }
+
+        function initCustomCalendar() {
+            renderTimeAxis();
+            renderGridBackground();
+
+            document.getElementById('prev-week-btn').addEventListener('click', () => { currentDateOffset--; loadCalendarWeek(currentDateOffset); });
+            document.getElementById('next-week-btn').addEventListener('click', () => { currentDateOffset++; loadCalendarWeek(currentDateOffset); });
+            document.getElementById('today-week-btn').addEventListener('click', () => { currentDateOffset = 0; loadCalendarWeek(currentDateOffset); });
+        }
+
+        function getStartOfWeek(date) {
+            const result = new Date(date);
+            const day = result.getDay();
+            const diff = result.getDate() - day + (day === 0 ? -6 : 1);
+            result.setDate(diff);
+            result.setHours(0, 0, 0, 0);
+            return result;
+        }
+
+        function renderTimeAxis() {
+            const axis = document.getElementById('calendar-time-axis');
+            axis.innerHTML = '';
+            for (let i = 1; i < 24; i++) {
+                const hourDiv = document.createElement('div');
+                hourDiv.className = 'absolute w-full text-right pr-2 text-xs text-gray-400 font-mono transform -translate-y-1/2';
+                hourDiv.style.top = `${i * 60}px`;
+                hourDiv.textContent = `${i.toString().padStart(2, '0')}:00`;
+                axis.appendChild(hourDiv);
+            }
+        }
+
+        function renderGridBackground() {
+            const bg = document.getElementById('calendar-grid-bg');
+            bg.innerHTML = '';
+            for (let i = 1; i < 24; i++) {
+                const line = document.createElement('div');
+                line.className = 'absolute w-full border-b border-gray-50';
+                line.style.top = `${i * 60}px`;
+                bg.appendChild(line);
+            }
+        }
+
+        async function loadCalendarWeek(weekOffset) {
+            document.getElementById('calendar-loader').classList.remove('hidden');
+
+            const now = new Date();
+            const targetWeekDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (weekOffset * 7));
+            const startOfWeek = getStartOfWeek(targetWeekDate);
+            
+            const endOfWeek = new Date(startOfWeek);
+            endOfWeek.setDate(endOfWeek.getDate() + 7);
+
+            const monthNames = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+            document.getElementById('calendar-month-label').textContent = `${monthNames[startOfWeek.getMonth()]} ${startOfWeek.getFullYear()}`;
+
+            const daysRow = document.getElementById('calendar-days-row');
+            daysRow.innerHTML = '';
+            const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+            
+            for (let i = 0; i < 7; i++) {
+                const colDate = new Date(startOfWeek);
+                colDate.setDate(colDate.getDate() + i);
+                
+                const isToday = colDate.toDateString() === new Date().toDateString();
+                const dayHeader = document.createElement('div');
+                dayHeader.className = `flex-1 min-w-0 w-0 py-2 flex flex-col items-center border-r border-gray-100 ${isToday ? 'bg-blue-50/50' : 'bg-white'}`;
+                
+                dayHeader.innerHTML = `
+                    <div class="text-xs uppercase tracking-wider text-gray-500 font-semibold">${dayNames[i]}</div>
+                    <div class="text-xl font-medium ${isToday ? 'text-blue-600' : 'text-gray-900'} mt-0.5 mb-1">${colDate.getDate()}</div>
+                    <div class="w-full px-1 flex flex-col gap-1 min-h-[4px]" id="allday-col-${i}"></div>
+                `;
+                daysRow.appendChild(dayHeader);
+            }
+
+            const colsContainer = document.getElementById('calendar-columns-container');
+            const bgLines = document.getElementById('calendar-grid-bg');
+            colsContainer.innerHTML = '';
+            colsContainer.appendChild(bgLines);
+
+            for (let i = 0; i < 7; i++) {
+                const col = document.createElement('div');
+                col.className = 'flex-1 min-w-0 w-0 border-r border-gray-100 relative';
+                col.id = `col-day-${i}`;
+                colsContainer.appendChild(col);
+            }
+
+            try {
+                let listUrl = `/api/gantt?start=${startOfWeek.toISOString()}&end=${endOfWeek.toISOString()}`;
+                if (activeCalendars.length > 0) {
+                    listUrl += "&calendars=" + encodeURIComponent(activeCalendars.join(','));
+                }
+                const res = await fetch(listUrl);
+                if (!res.ok) throw new Error('Failed to fetch events');
+                const events = await res.json();
+                
+                if (events && events.length > 0) {
+                    let dailyEvents = [[], [], [], [], [], [], []];
+
+                    events.forEach(ev => {
+                        let evtStart = new Date(ev.start_time);
+                        let evtEnd = new Date(ev.end_time);
+                        
+                        if (evtEnd <= startOfWeek || evtStart >= endOfWeek) return;
+
+                        let durationMins = (evtEnd - evtStart) / (60 * 1000);
+                        let isAllDay = ev.is_all_day === true;
+
+                        if (isAllDay) {
+                            let spanDays = Math.ceil(durationMins / 1440);
+                            const startDayOffset = Math.floor((evtStart - startOfWeek) / (24 * 60 * 60 * 1000));
+                            for (let d = 0; d < spanDays; d++) {
+                                let targetCol = startDayOffset + d;
+                                if (targetCol >= 0 && targetCol <= 6) {
+                                    const el = document.createElement('div');
+                                    el.className = 'bg-blue-100 text-blue-800 text-[10px] font-semibold rounded px-1.5 py-0.5 truncate shadow-sm cursor-pointer border border-blue-200';
+                                    el.title = ev.name;
+                                    el.textContent = ev.name;
+                                    el.addEventListener('click', (e) => showTooltip(e, ev.name, `Весь день`));
+                                    const container = document.getElementById(`allday-col-${targetCol}`);
+                                    if(container) container.appendChild(el);
+                                }
+                            }
+                        } else {
+                            const startDayOffset = Math.floor((evtStart - startOfWeek) / (24 * 60 * 60 * 1000));
+                            if(startDayOffset >= 0 && startDayOffset <= 6) {
+                                const startMins = evtStart.getHours() * 60 + evtStart.getMinutes();
+                                if (durationMins <= 0 || isNaN(durationMins)) durationMins = 30; // fallback
+                                dailyEvents[startDayOffset].push({ ev, startMins, durationMins, evtStart, evtEnd });
+                            }
+                        }
+                    });
+
+                    for (let d = 0; d < 7; d++) {
+                        let dayEvts = dailyEvents[d];
+                        dayEvts.sort((a,b) => a.startMins - b.startMins);
+
+                        for (let i = 0; i < dayEvts.length; i++) {
+                            let curr = dayEvts[i];
+                            let overlaps = [];
+                            let currStart = curr.startMins;
+                            let currEnd = curr.startMins + curr.durationMins;
+
+                            for (let j = 0; j < dayEvts.length; j++) {
+                                let other = dayEvts[j];
+                                let otherStart = other.startMins;
+                                let otherEnd = other.startMins + other.durationMins;
+                                if (otherStart < currEnd && otherEnd > currStart) {
+                                    overlaps.push(j);
+                                }
+                            }
+
+                            let pos = overlaps.indexOf(i);
+                            let total = overlaps.length;
+                            
+                            let widthPct = 100 / total;
+                            let leftPct = pos * widthPct;
+
+                            const el = document.createElement('div');
+                            el.className = 'absolute border-l-4 rounded text-xs p-1.5 overflow-hidden transition-all shadow-sm animate-slide-in cursor-pointer z-20 hover:z-30';
+                            
+                            if (pos % 2 === 0) {
+                                el.classList.add('bg-red-100/90', 'hover:bg-red-200/90', 'border-red-500');
+                            } else {
+                                el.classList.add('bg-orange-100/90', 'hover:bg-orange-200/90', 'border-orange-500');
+                            }
+
+                            el.style.top = `${currStart}px`;
+                            el.style.height = `${curr.durationMins}px`;
+                            el.style.left = `calc(${leftPct}% + 4px)`;
+                            el.style.width = `calc(${widthPct}% - 8px)`;
+
+                            let stStr = `${curr.evtStart.getHours().toString().padStart(2,'0')}:${curr.evtStart.getMinutes().toString().padStart(2,'0')}`;
+                            let endStr = `${curr.evtEnd.getHours().toString().padStart(2,'0')}:${curr.evtEnd.getMinutes().toString().padStart(2,'0')}`;
+
+                            el.innerHTML = `<div class="font-semibold text-gray-900 truncate leading-tight">${curr.ev.name}</div>
+                                          <div class="text-gray-600 font-mono text-[9px] mt-0.5">${stStr}</div>`;
+                            
+                            el.addEventListener('click', (e) => showTooltip(e, curr.ev.name, `${stStr} - ${endStr}`));
+
+                            const col = document.getElementById(`col-day-${d}`);
+                            if(col) col.appendChild(el);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+            } finally {
+                document.getElementById('calendar-loader').classList.add('hidden');
+            }
+        }
+        
+        // initialize visual layout once
+        initCustomCalendar();
+    </script>
+</body>
+</html>
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\static\style.css
+==================================================
+.resizable {
+    resize: horizontal;
+    overflow: auto;
+}
+
+#chat-panel:hover,
+#calendar-panel:hover {
+    cursor: col-resize;
+}
+
+#messages::-webkit-scrollbar {
+    width: 6px;
+}
+
+#messages::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+
+#messages::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-slide-in {
+    animation: slideIn 0.3s ease-out;
+}
+
+button:hover {
+    transform: scale(1.05);
+}
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\dump_yandex_index.html
+==================================================
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LifeForge — AI Planner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-slide-in { animation: slideIn 0.3s ease-out; }
+
+        /* The drag handle */
+        #resizer { cursor: col-resize; transition: background 0.2s; }
+        #resizer:hover, #resizer.active { background: #9ca3af; } /* gray-400 */
+    </style>
+</head>
+
+<body class="bg-gray-100 h-screen w-screen overflow-hidden flex font-sans text-gray-800 selection:bg-blue-200">
+    
+    <!-- Outer padding wrapper -->
+    <div class="flex w-full h-full p-6 relative gap-4" id="main-container">
+
+        <!-- LEFT PANEL: CHAT CARD -->
+        <div id="chat-panel" class="bg-white rounded-[2rem] shadow-xl border border-gray-200 flex flex-col overflow-hidden relative" style="width: 45%; min-width: 30%;">
+            
+            <!-- Header -->
+            <div class="px-8 py-5 border-b border-gray-100 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-between">
+                <h1 class="text-xl font-bold font-mono tracking-tight text-gray-900">Life-Forge AI</h1>
+                <p class="text-xs text-gray-400">
+                    <a href="/auth/yandex" class="hover:text-red-500 underline transition-colors">Яндекс Auth</a>
+                </p>
+            </div>
+
+            <!-- Messages Area -->
+            <div id="messages" class="flex-1 p-8 overflow-y-auto space-y-6 bg-[#fcfcfc] flex flex-col">
+                <div class="text-center text-gray-400 py-8 text-sm">Начните общение с ИИ для планирования задач!</div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="p-6 bg-white border-t border-gray-100 relative z-10">
+                <div class="flex items-center bg-gray-50 border border-gray-200 rounded-full p-2 pr-2.5 shadow-sm focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-400 transition-all">
+                    <input id="user-message" type="text" placeholder="Привет, я ИИ и помогу тебе с планированием. Только напиши!"
+                        class="flex-1 px-4 py-2.5 bg-transparent border-none focus:outline-none text-gray-700 placeholder-gray-400"
+                        autocomplete="off">
+                    
+                    <button id="send-button" type="button"
+                        class="p-3 bg-gray-900 text-white rounded-full hover:bg-black transition-transform transform active:scale-95 flex items-center justify-center">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- DRAG RESIZER -->
+        <div id="resizer" class="w-1.5 bg-gray-200 hover:bg-gray-300 rounded-full flex-shrink-0 relative group flex items-center justify-center h-20 self-center transition-colors">
+            <div class="w-1 h-8 rounded bg-gray-400 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+        </div>
+
+        <!-- RIGHT PANEL: CALENDAR CARD -->
+        <div id="calendar-panel" class="bg-white rounded-[2rem] shadow-xl border border-gray-200 flex flex-col overflow-hidden relative" style="width: 55%; min-width: 30%;">
+            
+            <!-- Header -->
+            <div class="px-8 py-5 border-b border-gray-100 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-between">
+                <h2 class="text-xl font-bold font-mono tracking-tight text-gray-900">Яндекс Календарь</h2>
+                <div class="flex items-center gap-3">
+                    <a href="/static/calendar.html" target="_blank"
+                       class="px-4 py-1.5 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 text-sm font-semibold transition-colors flex items-center gap-2">
+                        📊 Диаграмма Ганта
+                    </a>
+                </div>
+            </div>
+
+            <!-- Custom Weekly Calendar UI -->
+            <div class="flex-1 bg-white overflow-hidden flex flex-col relative rounded-b-[2rem]" id="custom-calendar-container">
+                <!-- Controls Row -->
+                <div class="px-6 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+                    <div class="flex items-center gap-4">
+                        <h3 id="calendar-month-label" class="text-lg font-bold text-gray-800 capitalize">Календарь</h3>
+                        <div class="flex items-center bg-white rounded-lg border border-gray-200 shadow-sm ml-2">
+                            <button id="prev-week-btn" class="px-3 py-1.5 hover:bg-gray-50 text-gray-500 hover:text-gray-900 border-r border-gray-200 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                            </button>
+                            <button id="today-week-btn" class="px-4 py-1.5 text-sm font-medium hover:bg-gray-50 transition-colors text-gray-700">Сегодня</button>
+                            <button id="next-week-btn" class="px-3 py-1.5 hover:bg-gray-50 text-gray-500 hover:text-gray-900 border-l border-gray-200 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <a href="https://calendar.yandex.ru" target="_blank" class="px-4 py-1.5 bg-gray-900 text-white text-sm font-medium rounded-full shadow-sm hover:bg-black transition-colors flex items-center gap-2">
+                        Открыть в Яндекс
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                    </a>
+                </div>
+
+                <!-- Calendar Grid -->
+                <div class="flex flex-col flex-1 overflow-hidden relative">
+                    <!-- Loading overlay -->
+                    <div id="calendar-loader" class="absolute inset-0 bg-white/70 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+                        <div class="flex space-x-1">
+                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0s"></div>
+                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                            <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
+                        </div>
+                    </div>
+
+                    <!-- Days Header -->
+                    <div id="calendar-days-header" class="flex border-b border-gray-200 bg-white z-20">
+                        <div class="w-14 flex-shrink-0 border-r border-gray-100 bg-white"></div>
+                        <div id="calendar-days-row" class="flex flex-1">
+                            <!-- 7 Days JS injected -->
+                        </div>
+                    </div>
+
+                    <!-- Scrollable Body -->
+                    <div id="calendar-scroll-area" class="flex-1 overflow-y-auto relative bg-[#fafafa]">
+                        <div class="flex relative min-h-[1440px]">
+                            <!-- Time Axis -->
+                            <div class="w-14 flex-shrink-0 border-r border-gray-100 bg-white relative z-10" id="calendar-time-axis"></div>
+                            
+                            <!-- Columns Container -->
+                            <div id="calendar-columns-container" class="flex flex-1 relative bg-white">
+                                <!-- Grid Lines Background -->
+                                <div class="absolute inset-0 z-0 pointer-events-none" id="calendar-grid-bg"></div>
+                                <!-- 7 Columns JS injected -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gamification Floating Button -->
+            <button class="absolute bottom-6 right-6 px-6 py-2.5 bg-white border-2 border-gray-900 rounded-full shadow-lg font-bold text-gray-900 hover:bg-gray-50 transition-transform hover:-translate-y-1 active:scale-95 z-20">
+                Gamification
+            </button>
+        </div>
+
+    </div>
+
+    <!-- SCRIPT -->
+    <script>
+        // === Resizer Logic ===
+        const resizer = document.getElementById('resizer');
+        const leftPanel = document.getElementById('chat-panel');
+        const rightPanel = document.getElementById('calendar-panel');
+        const container = document.getElementById('main-container');
+
+        let isResizing = false;
+
+        resizer.addEventListener('mousedown', function(e) {
+            isResizing = true;
+            resizer.classList.add('active');
+            document.body.style.cursor = 'col-resize';
+            document.getElementById('google-calendar').style.pointerEvents = 'none'; // Prevent iframe capturing mouse
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!isResizing) return;
+            const containerRect = container.getBoundingClientRect();
+            // Substract padding left (24px gap is handled by flex math)
+            let newLeftWidth = e.clientX - containerRect.left - 24; 
+            
+            if (newLeftWidth < parseInt(containerRect.width * 0.3)) newLeftWidth = parseInt(containerRect.width * 0.3); 
+            if (newLeftWidth > containerRect.width - parseInt(containerRect.width * 0.3)) newLeftWidth = containerRect.width - parseInt(containerRect.width * 0.3);
+
+            const percentage = (newLeftWidth / containerRect.width) * 100;
+            leftPanel.style.width = `calc(${percentage}% - 12px)`; // Approx gap splitting
+            rightPanel.style.width = `calc(${100 - percentage}% - 12px)`;
+        });
+
+        document.addEventListener('mouseup', function(e) {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('active');
+                document.body.style.cursor = '';
+                document.getElementById('google-calendar').style.pointerEvents = 'auto';
+            }
+        });
+
+        // === Chat Logic ===
+        async function sendMessage(event) {
+            if (event) {
+                event.preventDefault();
+            }
+
+            const input = document.getElementById('user-message');
+            const message = input.value.trim();
+
+            if (!message) return;
+
+            showUserMessage(message);
+            input.value = '';
+
+            showLoading();
+
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => { controller.abort(); }, 15000); // 15s timeout
+
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: message }),
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ошибка ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.response) showBotMessage(data.response);
+                else if (data.message) showBotMessage(data.message);
+                else if (data.error) showBotMessage('Ошибка: ' + data.error);
+                else showBotMessage('Ответ: ' + JSON.stringify(data));
+
+                refreshCalendar();
+            } catch (error) {
+                let errorMessage = '❌ Ошибка соединения';
+                if (error.name === 'AbortError') errorMessage = '❌ Таймаут запроса';
+                showBotMessage(errorMessage);
+            } finally {
+                hideLoading();
+                input.focus();
+            }
+        }
+
+        function showUserMessage(message) {
+            const messages = document.getElementById('messages');
+            const userDiv = document.createElement('div');
+            // User message bubble
+            userDiv.className = 'message p-4 rounded-2xl rounded-tr-sm bg-gray-800 text-white self-end max-w-[85%] animate-slide-in shadow-sm';
+            userDiv.textContent = message;
+            messages.appendChild(userDiv);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function showBotMessage(message) {
+            const messages = document.getElementById('messages');
+            const botDiv = document.createElement('div');
+            // Bot message bubble
+            botDiv.className = 'message p-5 rounded-2xl rounded-tl-sm bg-white border border-gray-200 text-gray-800 self-start max-w-[85%] animate-slide-in shadow-sm leading-relaxed';
+            botDiv.innerHTML = `<div class="text-xs border-b border-gray-100 pb-2 mb-3 font-mono text-gray-400">🤖 LifeForge AI</div><div class="whitespace-pre-wrap">${message}</div>`;
+            messages.appendChild(botDiv);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function showLoading() {
+            const messages = document.getElementById('messages');
+            const loadingDiv = document.createElement('div');
+            loadingDiv.id = 'loading-indicator';
+            loadingDiv.className = 'message p-4 rounded-2xl rounded-tl-sm bg-white border border-gray-200 text-gray-800 self-start max-w-[85%] animate-slide-in shadow-sm flex items-center gap-3';
+            loadingDiv.innerHTML = `
+                <div class="flex space-x-1">
+                    <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0s"></div>
+                    <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                    <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
+                </div>
+                <span class="text-gray-400 text-sm">Печатает...</span>
+            `;
+            messages.appendChild(loadingDiv);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function hideLoading() {
+            const loadingDiv = document.getElementById('loading-indicator');
+            if (loadingDiv) loadingDiv.remove();
+        }
+
+        function refreshCalendar() {
+            if (typeof loadCalendarWeek === 'function') {
+                loadCalendarWeek(currentDateOffset);
+            }
+        }
+
+        // INIT
+        document.addEventListener('DOMContentLoaded', () => {
+            const input = document.getElementById('user-message');
+            const sendButton = document.getElementById('send-button');
+
+            if (input) input.focus();
+
+            if (sendButton) {
+                sendButton.addEventListener('click', sendMessage);
+            }
+
+            if (input) {
+                input.addEventListener('keypress', function (e) {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendMessage(e);
+                    }
+                });
+            }
+
+            initCustomCalendar();
+        });
+
+        // === Custom Calendar Logic ===
+        let currentDateOffset = 0; // weeks from today
+
+        function initCustomCalendar() {
+            renderTimeAxis();
+            renderGridBackground();
+            loadCalendarWeek(currentDateOffset);
+
+            document.getElementById('prev-week-btn').addEventListener('click', () => { currentDateOffset--; loadCalendarWeek(currentDateOffset); });
+            document.getElementById('next-week-btn').addEventListener('click', () => { currentDateOffset++; loadCalendarWeek(currentDateOffset); });
+            document.getElementById('today-week-btn').addEventListener('click', () => { currentDateOffset = 0; loadCalendarWeek(currentDateOffset); });
+        }
+
+        function getStartOfWeek(date) {
+            const result = new Date(date);
+            const day = result.getDay();
+            const diff = result.getDate() - day + (day === 0 ? -6 : 1);
+            result.setDate(diff);
+            result.setHours(0, 0, 0, 0);
+            return result;
+        }
+
+        function renderTimeAxis() {
+            const axis = document.getElementById('calendar-time-axis');
+            axis.innerHTML = '';
+            for (let i = 1; i < 24; i++) {
+                const hourDiv = document.createElement('div');
+                hourDiv.className = 'absolute w-full text-right pr-2 text-xs text-gray-400 font-mono transform -translate-y-1/2';
+                hourDiv.style.top = `${i * 60}px`;
+                hourDiv.textContent = `${i.toString().padStart(2, '0')}:00`;
+                axis.appendChild(hourDiv);
+            }
+        }
+
+        function renderGridBackground() {
+            const bg = document.getElementById('calendar-grid-bg');
+            bg.innerHTML = '';
+            for (let i = 1; i < 24; i++) {
+                const line = document.createElement('div');
+                line.className = 'absolute w-full border-b border-gray-50';
+                line.style.top = `${i * 60}px`;
+                bg.appendChild(line);
+            }
+        }
+
+        async function loadCalendarWeek(weekOffset) {
+            document.getElementById('calendar-loader').classList.remove('hidden');
+
+            const now = new Date();
+            const targetWeekDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (weekOffset * 7));
+            const startOfWeek = getStartOfWeek(targetWeekDate);
+            
+            const endOfWeek = new Date(startOfWeek);
+            endOfWeek.setDate(endOfWeek.getDate() + 7);
+
+            const monthNames = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+            document.getElementById('calendar-month-label').textContent = `${monthNames[startOfWeek.getMonth()]} ${startOfWeek.getFullYear()}`;
+
+            const daysRow = document.getElementById('calendar-days-row');
+            daysRow.innerHTML = '';
+            const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+            
+            for (let i = 0; i < 7; i++) {
+                const colDate = new Date(startOfWeek);
+                colDate.setDate(colDate.getDate() + i);
+                
+                const isToday = colDate.toDateString() === new Date().toDateString();
+                const dayHeader = document.createElement('div');
+                dayHeader.className = `flex-1 py-3 text-center border-r border-gray-100 ${isToday ? 'bg-blue-50/50' : 'bg-white'}`;
+                
+                dayHeader.innerHTML = `
+                    <div class="text-xs uppercase tracking-wider text-gray-500 font-semibold">${dayNames[i]}</div>
+                    <div class="text-xl font-medium ${isToday ? 'text-blue-600' : 'text-gray-900'} mt-0.5">${colDate.getDate()}</div>
+                `;
+                daysRow.appendChild(dayHeader);
+            }
+
+            const colsContainer = document.getElementById('calendar-columns-container');
+            const bgLines = document.getElementById('calendar-grid-bg');
+            colsContainer.innerHTML = '';
+            colsContainer.appendChild(bgLines);
+
+            for (let i = 0; i < 7; i++) {
+                const col = document.createElement('div');
+                col.className = 'flex-1 border-r border-gray-100 relative';
+                col.id = `col-day-${i}`;
+                colsContainer.appendChild(col);
+            }
+
+            try {
+                const res = await fetch(`/api/gantt?start=${startOfWeek.toISOString()}&end=${endOfWeek.toISOString()}`);
+                if (!res.ok) throw new Error('Failed to fetch events');
+                const events = await res.json();
+                
+                if (events && events.length > 0) {
+                    events.forEach(ev => {
+                        const evtStart = new Date(ev.start_time);
+                        const evtEnd = new Date(ev.end_time);
+                        
+                        if (evtEnd <= startOfWeek || evtStart >= endOfWeek) return;
+
+                        const startDayOffset = Math.floor((evtStart - startOfWeek) / (24 * 60 * 60 * 1000));
+                        if(startDayOffset >= 0 && startDayOffset <= 6) {
+                            const startMins = evtStart.getHours() * 60 + evtStart.getMinutes();
+                            let durationMins = (evtEnd - evtStart) / (60 * 1000);
+                            if (durationMins < 30) durationMins = 30;
+
+                            const el = document.createElement('div');
+                            el.className = 'absolute inset-x-1 mx-1 bg-red-100/90 hover:bg-red-200/90 border-l-4 border-red-500 rounded text-xs p-1.5 overflow-hidden transition-colors shadow-sm animate-slide-in cursor-pointer z-20 hover:z-30';
+                            el.style.top = `${startMins}px`;
+                            el.style.height = `${durationMins}px`;
+                            el.innerHTML = `<div class="font-semibold text-red-900 truncate leading-tight">${ev.title}</div>
+                                          <div class="text-red-700/80 text-[10px] mt-0.5">${evtStart.getHours().toString().padStart(2,'0')}:${evtStart.getMinutes().toString().padStart(2,'0')}</div>`;
+                            
+                            const col = document.getElementById(`col-day-${startDayOffset}`);
+                            if(col) col.appendChild(el);
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error(err);
+            } finally {
+                document.getElementById('calendar-loader').classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\cmd\life_forge\main.go
+==================================================
+package main
+
+import (
+	"context"
+	"life_forge/internal/ai"
+	"life_forge/internal/config"
+	"life_forge/internal/handlers"
+	"life_forge/internal/models"
+	"life_forge/internal/storage"
+	"log"
+	"net/http"
+	"os/signal"
+	"syscall"
+	"time"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type Router struct {
+	chatHandler     *handlers.ChatHandler
+	authHandler     *handlers.AuthHandler
+	calendarHandler *handlers.CalendarHandler
+}
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, HX-Request")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func main() {
+	cfg := config.New()
+	if cfg.GigaChatKey == "" {
+		log.Fatal("Couldnt find Gigachat key")
+	}
+
+	//signals
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer cancel()
+
+	ai_client := ai.NewGigaChatClient(cfg.GigaChatKey)
+
+	pool, err := pgxpool.New(ctx, cfg.PostgresDSN) //пул соединений с БД
+	if err != nil {
+		log.Fatal("unable to connect to bd", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		log.Fatal("unable to ping db", err)
+	}
+
+	contextStorage := storage.NewContextStorage(pool)
+
+	calendarStorage, err := storage.NewGoogleCalendarStorage(pool)
+	if err != nil {
+		log.Fatal("Error to connect to Google Calendar", err)
+	}
+	log.Printf("Calendar status: authorized=%v", calendarStorage.IsAuthorized())
+
+	//debug
+	if calendarStorage.IsAuthorized() {
+		events, err := calendarStorage.ListEvents(context.Background(), time.Now().UTC(), time.Now().AddDate(0, 0, 5).UTC())
+		if err != nil {
+			log.Printf("Error listing events: %v", err)
+		}
+		log.Printf("📅 Calendar events found: %d", len(events))
+	} else {
+		log.Println("Go by url: 🔗 http://localhost:8080/auth/google")
+	}
+
+	chatHandler := handlers.NewChatHandler(contextStorage, ai_client, calendarStorage)
+	authHandler := handlers.NewAuthHandler(calendarStorage)
+	calendarHandler := handlers.NewCalendarHandler(calendarStorage)
+
+	mux := http.NewServeMux()
+
+	router := newRouter(chatHandler, authHandler, calendarHandler)
+
+	router.register(mux)
+
+	handler := corsMiddleware(mux)
+
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: handler,
+	}
+
+	log.Println("Server starting on http://localhost:8080")
+	go func() {
+		if err := http.ListenAndServe(":8080", handler); err != nil && err != http.ErrServerClosed {
+			log.Fatal("Fail Listen and Serve with error ", err)
+		}
+	}()
+
+	<-ctx.Done()
+
+	log.Println("Shutting down server...")
+
+	shutdownCtx, stop := context.WithTimeout(context.Background(), 5*time.Second)
+	defer stop()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Println("Server cannot be stoped. error %w", err)
+	}
+}
+
+func initStorageContext(ctx context.Context, storageInstance *storage.ContextStorage) {
+	storageInstance.SaveContext(ctx, &models.Context{
+		ID:       1,
+		Goals:    []string{},
+		Recent5:  []string{},
+		Progress: map[string]string{},
+	})
+}
+
+func newRouter(
+	chatHandler *handlers.ChatHandler,
+	authHandler *handlers.AuthHandler,
+	calendarHandler *handlers.CalendarHandler,
+) *Router {
+	return &Router{
+		chatHandler:     chatHandler,
+		authHandler:     authHandler,
+		calendarHandler: calendarHandler,
+	}
+}
+
+func (r *Router) register(mux *http.ServeMux) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "static/index.html")
+	})
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+
+	mux.HandleFunc("/chat", r.chatHandler.HandleChat)
+	mux.HandleFunc("/auth/google", r.authHandler.HandleGoogleLogin)
+	mux.HandleFunc("/auth/callback", r.authHandler.HandleGoogleCallback)
+	mux.HandleFunc("/api/gantt", r.calendarHandler.HandleGanttDiagramm)
+	mux.HandleFunc("/api/calendars", r.calendarHandler.HandleGetCalendars)
+
+	// Init storage context if needed
+	//initStorageContext(ctx, storage)
+
+	//mux.HandleFunc("/entry", handler.HandleCreateEntry)
+	//mux.HandleFunc("/entries", handler.HandleGetEntries)
+}
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\internal\ai\client.go
+==================================================
+package ai
+
+import (
+	"bytes"
+	"context"
+	"crypto/tls"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+)
+
+const (
+	model = "GigaChat-Max"
+)
+
+type Message struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type GigaChatRequest struct {
+	Model    string    `json:"model"`
+	Messages []Message `json:"messages"`
+	Stream   bool      `json:"stream"`
+}
+
+type GigaChatResponse struct {
+	Choices []struct {
+		Message Message `json:"message"`
+	} `json:"choices"`
+}
+
+type GigaChatClient struct {
+	AuthKey string
+	Token   Token
+}
+
+type Token struct {
+	Access_token string
+	Expires_at   time.Time
+}
+
+func NewGigaChatClient(authKey string) *GigaChatClient {
+	return &GigaChatClient{AuthKey: authKey}
+}
+
+func (gg_cl *GigaChatClient) Generate(ctx context.Context, prompt string) (string, error) {
+	log.Printf("Send message to AI, length: %d symbols", len(prompt))
+
+	// if len(prompt) > 500 {
+	// 	log.Printf("Start of the promt (1000 symbols): %s", prompt[:1000])
+	// } else {
+	// 	log.Printf("Full promt: %s", prompt)
+	// }
+
+	// TLS fix
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr, Timeout: 60 * time.Second}
+
+	//get token or exist
+	tokenData, err := gg_cl.getToken(ctx, client)
+	if err != nil {
+		return "", fmt.Errorf("error with getting token. doesnt exists & cant get. %w", err)
+	}
+	//query to AI
+	reqBody := GigaChatRequest{
+		Model:    model,
+		Messages: []Message{{Role: "user", Content: prompt}},
+		Stream:   false,
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		log.Printf("Error marshal json: %v", err)
+		return "", fmt.Errorf("chat marshal failed: %w", err)
+	}
+
+	chatHttpReq, err := http.NewRequestWithContext(ctx, "POST",
+		"https://gigachat.devices.sberbank.ru/api/v1/chat/completions",
+		bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("chat request create failed: %v", err)
+		return "", fmt.Errorf("chat request create failed: %w", err)
+	}
+
+	chatHttpReq.Header.Set("Authorization", "Bearer "+tokenData)
+	chatHttpReq.Header.Set("Content-Type", "application/json")
+	chatHttpReq.Header.Set("RqUID", "123e4567-e89b-12d3-a456-426614174001")
+
+	log.Printf("Send query to chat...")
+	resp, err := client.Do(chatHttpReq)
+	if err != nil {
+		log.Printf("chat request failed: %v", err)
+		return "", fmt.Errorf("chat request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	log.Printf("get AI answer, status: %d", resp.StatusCode)
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Error to read response: %v", err)
+		return "", fmt.Errorf("read response failed: %w", err)
+	}
+
+	var chatResp GigaChatResponse
+	if err := json.Unmarshal(bodyBytes, &chatResp); err != nil {
+		log.Printf("Error to decode answer: %v", err)
+		return "", fmt.Errorf("chat decode failed: %w", err)
+	}
+
+	if len(chatResp.Choices) == 0 {
+		log.Printf("no choices in response")
+		return "", fmt.Errorf("no choices in response")
+	}
+
+	responseText := chatResp.Choices[0].Message.Content
+
+	return responseText, nil
+}
+
+func (gg_cl *GigaChatClient) getToken(ctx context.Context, client *http.Client) (string, error) {
+	//check if token exist
+	if gg_cl.Token.Access_token != "" && time.Now().Before(gg_cl.Token.Expires_at) {
+		return gg_cl.Token.Access_token, nil
+	}
+
+	// get token
+	tokenForm := url.Values{}
+	tokenForm.Set("scope", "GIGACHAT_API_PERS")
+
+	tokenHttpReq, err := http.NewRequestWithContext(ctx, "POST",
+		"https://ngw.devices.sberbank.ru:9443/api/v2/oauth",
+		strings.NewReader(tokenForm.Encode()))
+
+	if err != nil {
+		log.Printf("Error to create token request: %v", err)
+		return "", fmt.Errorf("Token request create failed: %w", err)
+	}
+
+	tokenHttpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	tokenHttpReq.Header.Set("RqUID", "123e4567-e89b-12d3-a456-426614174000")
+	tokenHttpReq.Header.Set("Authorization", "Basic "+gg_cl.AuthKey)
+
+	tokenResp, err := client.Do(tokenHttpReq)
+	if err != nil {
+		log.Printf("Error token request: %v", err)
+		return "", fmt.Errorf("token request failed: %w", err)
+	}
+	defer tokenResp.Body.Close()
+
+	if tokenResp.StatusCode != 200 {
+		body, _ := io.ReadAll(tokenResp.Body)
+		log.Printf("Token Error %d: %s", tokenResp.StatusCode, string(body))
+		return "", fmt.Errorf("Token http %d", tokenResp.StatusCode)
+	}
+
+	var tokenData struct {
+		AccessToken string `json:"access_token"`
+	}
+
+	if err := json.NewDecoder(tokenResp.Body).Decode(&tokenData); err != nil {
+		log.Printf("Token decode failed: %v", err)
+		return "", fmt.Errorf("Token decode failed: %w", err)
+	}
+
+	log.Printf("Get token succesfully")
+
+	gg_cl.Token.Access_token = tokenData.AccessToken
+	gg_cl.Token.Expires_at = time.Now().Add(29 * time.Minute)
+
+	return gg_cl.Token.Access_token, nil
+}
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\internal\config\config.go
+==================================================
+package config
+
+import (
+	"github.com/joho/godotenv"
+	"os"
+)
+
+type Config struct {
+	PostgresDSN string
+	GigaChatKey string
+}
+
+func New() *Config {
+	_ = godotenv.Load()
+
+	return &Config{
+		PostgresDSN: getEnv("POSTGRES_DSN", "postgres://postgres:12345@localhost:5432/life_forge?sslmode=disable"),
+		GigaChatKey: getEnv("GIGACHAT_AUTH_KEY", ""),
+	}
+}
+
+func getEnv(key, defaultVal string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultVal
+}
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\internal\core\logger\config.go
+==================================================
+package core_logger
+
+import (
+	"fmt"
+	"github.com/kelseyhightower/envconfig"
+)
+
+type Config struct {
+	Level  string `envconfig:"LOGGER_LEVEL" required:"true"`
+	Folder string `envconfig:"LOGGER_FOLDER" required:"true"`
+}
+
+func NewConfig() (Config, error) {
+	var config Config
+
+	if err := envconfig.Process("", &config); err != nil {
+		return Config{}, fmt.Errorf("process logger config: %w", err)
+	}
+
+	return config, nil
+}
+
+func NewConfigMust() Config {
+	config, err := NewConfig()
+
+	if err != nil {
+		err = fmt.Errorf("get logger config: %w", err)
+		panic(err)
+	}
+
+	return config
+}
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\internal\core\logger\logger.go
+==================================================
+package core_logger
+
+import (
+	"context"
+	"fmt"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"os"
+	"path/filepath"
+	"time"
+)
+
+type Logger struct {
+	*zap.Logger
+	file *os.File
+}
+
+func FromContext(ctx context.Context) *Logger {
+	log, ok := ctx.Value("log").(*Logger)
+
+	if !ok {
+		panic("no loger in context")
+	}
+
+	return log
+}
+
+func NewLogger(logConfig Config) (*Logger, error) {
+	zapLvl := zap.NewAtomicLevel()
+	if err := zapLvl.UnmarshalText([]byte(logConfig.Level)); err != nil {
+		return nil, fmt.Errorf("error with unmarshaling logger level: %w", err)
+	}
+
+	if err := os.MkdirAll(logConfig.Folder, 0755); err != nil {
+		return nil, fmt.Errorf("mkdir log folder: %w", err)
+	}
+
+	timestamp := time.Now().UTC().Format("2006-01-02T15-04-05.000000")
+
+	logFilePath := filepath.Join(
+		logConfig.Folder,
+		fmt.Sprintf("%s.log", timestamp),
+	)
+
+	logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("open log file: %w", err)
+	}
+
+	zapConfig := zap.NewDevelopmentEncoderConfig()
+	zapConfig.EncodeTime = zapcore.TimeEncoderOfLayout("2006-01-02T15:04:05.000000")
+
+	//для ссылки на код в IDE
+	zapConfig.EncodeCaller = func(caller zapcore.EntryCaller, enc zapcore.PrimitiveArrayEncoder) {
+		enc.AppendString(caller.TrimmedPath())
+	}
+
+	zapEncoder := zapcore.NewConsoleEncoder(zapConfig)
+	core := zapcore.NewTee(
+		zapcore.NewCore(zapEncoder, zapcore.AddSync(os.Stdout), zapLvl),
+		zapcore.NewCore(zapEncoder, zapcore.AddSync(logFile), zapLvl),
+	)
+
+	zapLogger := zap.New(core, zap.AddCaller())
+
+	return &Logger{
+		Logger: zapLogger,
+		file:   logFile,
+	}, nil
+}
+
+func (l *Logger) Close() {
+	if err := l.file.Close(); err != nil {
+		fmt.Println("failed to close app logger: %w", err)
+	}
+}
+
+func (l *Logger) With(field ...zap.Field) *Logger {
+	return &Logger{
+		Logger: l.Logger.With(field...),
+		file:   l.file,
+	}
+}
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\internal\core\transport\http\middleware\common.go
+==================================================
+package core_http_middleware
+
+import (
+	"context"
+	"net/http"
+	"time"
+
+	core_logger "life_forge/internal/core/logger"
+	core_http_response "life_forge/internal/core/transport/http/response"
+	"github.com/google/uuid"
+	"go.uber.org/zap"
+)
+
+const (
+	requestIDHeader = "X-Request-ID"
+)
+
+func RequestID() Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requestID := r.Header.Get(requestIDHeader)
+			if requestID == "" {
+				requestID = uuid.NewString()
+			}
+
+			r.Header.Set(requestIDHeader, requestID)
+			w.Header().Set(requestIDHeader, requestID)
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func Logger(log *core_logger.Logger) Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requestID := r.Header.Get(requestIDHeader)
+
+			l := log.With(
+				zap.String("request_id", requestID),
+				zap.String("url", r.URL.String()),
+			)
+
+			ctx := context.WithValue(r.Context(), "log", l)
+
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+func Panic() Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
+			log := core_logger.FromContext(ctx)
+			responseHandler := core_http_response.NewHTTPResponseHanlder(log, w)
+
+			defer func() {
+				if p := recover(); p != nil {
+					responseHandler.PanicResponse(p, "during handler http got unexpected panic")
+				}
+			}()
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func Trace() Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
+			log := core_logger.FromContext(ctx)
+			wr := core_http_response.NewResponseWriter(w)
+
+			before := time.Now()
+			log.Debug(
+				">>> incoming HTTP request",
+				zap.Time("time", before.UTC()),
+			)
+
+			next.ServeHTTP(wr, r)
+
+			log.Debug(
+				"<<< done HTTP request",
+				zap.Int("status code", wr.GetStatusCodeOrPanic()),
+				zap.Duration("latency", time.Since(before)),
+			)
+		})
+	}
+}
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\internal\core\transport\http\middleware\middleware.go
+==================================================
+package core_http_middleware
+
+import "net/http"
+
+type Middleware func(http.Handler) http.Handler
+
+func ChainMiddleware(
+	h http.Handler,
+	m ...Middleware,
+) http.Handler {
+	if len(m) == 0 {
+		return h
+	}
+
+	for i := len(m) - 1; i >= 0; i-- {
+		h = m[i](h)
+	}
+	 
+	return h
+}
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\internal\core\transport\http\response\handler.go
+==================================================
+package core_http_response
+
+import (
+	"encoding/json"
+	"fmt"
+	"go.uber.org/zap"
+	core_logger "life_forge/internal/core/logger"
+	"net/http"
+)
+
+type HTTPResponseHandler struct {
+	log *core_logger.Logger
+	w   http.ResponseWriter
+}
+
+func NewHTTPResponseHanlder(
+	log *core_logger.Logger,
+	w http.ResponseWriter,
+) *HTTPResponseHandler {
+	return &HTTPResponseHandler{
+		log: log,
+		w:   w,
+	}
+}
+
+func (h *HTTPResponseHandler) PanicResponse(p any, msg string) {
+	statusCode := http.StatusInternalServerError
+	err := fmt.Errorf("unexpected panic: %v", p)
+
+	h.log.Error(msg, zap.Error(err))
+	h.w.WriteHeader(statusCode)
+
+	response := map[string]string{
+		"message": msg,
+		"error":   err.Error(),
+	}
+
+	if err := json.NewEncoder(h.w).Encode(response); err != nil {
+		h.log.Error("write HTTP response", zap.Error(err))
+	}
+}
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\internal\core\transport\http\response\writer.go
+==================================================
+package core_http_response
+
+import (
+	"net/http"
+)
+
+var (
+	statusCodeUninitialized = -1
+)
+
+type ResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func NewResponseWriter(w http.ResponseWriter) *ResponseWriter {
+	return &ResponseWriter{
+		ResponseWriter: w,
+		statusCode:     statusCodeUninitialized,
+	}
+}
+
+func (w *ResponseWriter) WriteHeader(statusCode int) {
+	w.ResponseWriter.WriteHeader(statusCode)
+	w.statusCode = statusCode
+}
+
+func (w *ResponseWriter) GetStatusCodeOrPanic() int {
+	if w.statusCode == statusCodeUninitialized {
+		panic("no status code set")
+	}
+
+	return w.statusCode
+}
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\internal\core\transport\http\server\config.go
+==================================================
+package core_http_server
+
+import (
+	"fmt"
+	"time"
+	"github.com/kelseyhightower/envconfig"
+)
+
+type Config struct {
+	Addr            string        `envconfig:"ADDR" required:"true"`
+	ShutdownTimeout time.Duration `envconfig:"SHUTDOWN_TIMEOUT" required:"true"`
+}
+
+func NewConfig() (Config, error) {
+	var config Config
+
+	if err := envconfig.Process("HTTP", &config); err != nil {
+		return Config{}, fmt.Errorf("process envconfig: %w", err)
+	}
+
+	return config, nil
+}
+
+func NewConfigMust() Config {
+	config, err := NewConfig()
+
+	if err != nil {
+		err = fmt.Errorf("get http server config: %w", err)
+	}
+
+	return config
+}
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\internal\core\transport\http\server\route.go
+==================================================
+package core_http_server
+
+import "net/http"
+
+type Route struct {
+	Method  string
+	Path    string
+	Handler http.HandlerFunc
+}
+
+func NewRoute(
+	method string,
+	path string,
+	handler http.HandlerFunc,
+) Route {
+	return Route{
+		Method:  method,
+		Path:    path,
+		Handler: handler,
+	}
+}
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\internal\core\transport\http\server\router.go
+==================================================
+package core_http_server
+
+import (
+	"fmt"
+	"net/http"
+)
+
+type ApiVersion string
+
+var (
+	ApiVersion1 = ApiVersion("v1")
+	ApiVersion2 = ApiVersion("v2")
+)
+
+type APIVersionRouter struct {
+	*http.ServeMux
+	apiVersion ApiVersion
+}
+
+func NewAPIVersionRouter(
+	apiVersion ApiVersion,
+) *APIVersionRouter {
+	return &APIVersionRouter{
+		ServeMux:   http.NewServeMux(),
+		apiVersion: apiVersion,
+	}
+}
+
+func (r *APIVersionRouter) RegisterRoutes(routes ...Route) {
+	for _, route := range routes {
+		pattern := fmt.Sprintf("%s %s", route.Method, route.Path)
+
+		r.Handle(pattern, route.Handler)
+	}
+}
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\internal\core\transport\http\server\server.go
+==================================================
+package core_http_server
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"go.uber.org/zap"
+	core_logger "life_forge/internal/core/logger"
+	core_http_middleware "life_forge/internal/core/transport/http/middleware"
+	"net/http"
+)
+
+type HTTPServer struct {
+	mux        *http.ServeMux
+	config     Config
+	log        *core_logger.Logger
+	middleware []core_http_middleware.Middleware
+}
+
+func NewHTTPServer(
+	config Config,
+	log *core_logger.Logger,
+	middleware ...core_http_middleware.Middleware,
+) *HTTPServer {
+	return &HTTPServer{
+		mux:        http.NewServeMux(),
+		config:     config,
+		log:        log,
+		middleware: middleware,
+	}
+}
+
+// RegisterMux регистрирует произвольный паттерн прямо на mux сервера.
+// Используй для статики, корневого роута и других маршрутов вне /api/vX/.
+func (h *HTTPServer) RegisterMux(pattern string, handler http.Handler) {
+	h.mux.Handle(pattern, handler)
+}
+
+func (h *HTTPServer) RegisterAPIRouters(routers ...*APIVersionRouter) {
+	//Регистрируем конкретные роуты роутеров
+	for _, router := range routers {
+		prefix := "/api/" + string(router.apiVersion)
+
+		h.mux.Handle(
+			prefix+"/",
+			http.StripPrefix(prefix, router),
+		)
+	}
+}
+
+func (h *HTTPServer) Run(ctx context.Context) error {
+	mux := core_http_middleware.ChainMiddleware(h.mux, h.middleware...)
+
+	server := &http.Server{
+		Addr:    h.config.Addr,
+		Handler: mux,
+	}
+
+	ch := make(chan error, 1)
+
+	go func() {
+		defer close(ch)
+
+		h.log.Warn("start HTTP server", zap.String("addr", h.config.Addr))
+
+		err := server.ListenAndServe()
+
+		if !errors.Is(err, http.ErrServerClosed) {
+			ch <- err
+		}
+	}()
+
+	select {
+	case err := <-ch:
+		if err != nil {
+			return fmt.Errorf("listen and server HTTP: %w", err)
+		}
+	case <-ctx.Done():
+		h.log.Warn("Shutdown HTTP server...")
+
+		shutdonwCtx, cancel := context.WithTimeout(
+			context.Background(),
+			h.config.ShutdownTimeout,
+		)
+		defer cancel()
+
+		if err := server.Shutdown(shutdonwCtx); err != nil {
+			_ = server.Close()
+
+			return fmt.Errorf("shutdown HTTP server: %w", err)
+		}
+
+		h.log.Warn("HTTP server stopped")
+	}
+
+	return nil
+}
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\internal\handlers\auth.go
+==================================================
+package handlers
+
+import (
+	"life_forge/internal/storage"
+	"net/http"
+)
+
+type AuthHandler struct {
+	calendarStorage *storage.GoogleCalendarStorage
+}
+
+func NewAuthHandler(cs *storage.GoogleCalendarStorage) *AuthHandler {
+	return &AuthHandler{calendarStorage: cs}
+}
+
+// /auth/google -> redirect to google
+func (h *AuthHandler) HandleGoogleLogin(w http.ResponseWriter, r *http.Request) {
+	url := h.calendarStorage.GetAuthURL()
+	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+}
+
+// /auth/callback -> Google send code here
+func (h *AuthHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Request) {
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		http.Error(w, "Code not found", http.StatusBadRequest)
+		return
+	}
+
+	err := h.calendarStorage.ExchangeCode(code)
+	if err != nil {
+		http.Error(w, "Failed to exchange code: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "http://localhost:8080", http.StatusPermanentRedirect)
+}
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\internal\handlers\calendar.go
+==================================================
+package handlers
+
+import (
+	"encoding/json"
+	"life_forge/internal/storage"
+	"log"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+
+	"google.golang.org/api/calendar/v3"
+)
+
+const (
+	daysToShowTasks = 14 // 2 недели
+	workers         = 7
+)
+
+type CalendarHandler struct {
+	calendarStorage *storage.GoogleCalendarStorage
+}
+
+type GanttTask struct {
+	Name      string    `json:"name"`
+	StartTime time.Time `json:"start_time"`
+	EndTime   time.Time `json:"end_time"`
+	IsAllDay  bool      `json:"is_all_day"`
+}
+
+func NewCalendarHandler(cs *storage.GoogleCalendarStorage) *CalendarHandler {
+	return &CalendarHandler{calendarStorage: cs}
+}
+
+func (cal *CalendarHandler) HandleGanttDiagramm(w http.ResponseWriter, r *http.Request) {
+	op := "internal/handlers/calendar.go HandleGranttDiagramm"
+
+	timeMin := time.Now().UTC()
+	timeMax := time.Now().AddDate(0, 0, daysToShowTasks).UTC()
+
+	if startStr := r.URL.Query().Get("start"); startStr != "" {
+		if t, err := time.Parse(time.RFC3339, startStr); err == nil {
+			timeMin = t
+		}
+	}
+	if endStr := r.URL.Query().Get("end"); endStr != "" {
+		if t, err := time.Parse(time.RFC3339, endStr); err == nil {
+			timeMax = t
+		}
+	}
+
+	var calIDs []string
+	if cals := r.URL.Query().Get("calendars"); cals != "" {
+		calIDs = strings.Split(cals, ",")
+	}
+
+	eventsArr, err := cal.calendarStorage.ListEvents(r.Context(), timeMin, timeMax, calIDs...)
+
+	if err != nil {
+		http.Error(w, "Failed to load user events: "+err.Error(), http.StatusInternalServerError)
+		log.Printf("Failed to load user events in %s with err: %v", op, err)
+		return
+	}
+
+	eventsChan := make(chan *calendar.Event, len(eventsArr))
+
+	var wgWorkers sync.WaitGroup
+
+	go func() {
+		defer close(eventsChan)
+
+		for i := 0; i < len(eventsArr); i++ {
+			eventsChan <- eventsArr[i]
+		}
+	}()
+
+	resEvents := make(chan GanttTask, len(eventsArr))
+
+	for range workers {
+		wgWorkers.Add(1)
+		go func() {
+			defer wgWorkers.Done()
+
+			for val := range eventsChan {
+				var start, end time.Time
+				var err error
+				isAllDay := false
+
+				if val.Start != nil && val.Start.DateTime != "" {
+					start, err = time.Parse(time.RFC3339, val.Start.DateTime)
+				} else if val.Start != nil && val.Start.Date != "" {
+					start, err = time.Parse("2006-01-02", val.Start.Date)
+					isAllDay = true
+				}
+				if err != nil {
+					log.Printf("Failed to parse start time in event '%s': %v", val.Summary, err)
+					continue
+				}
+
+				if val.End != nil && val.End.DateTime != "" {
+					end, err = time.Parse(time.RFC3339, val.End.DateTime)
+				} else if val.End != nil && val.End.Date != "" {
+					end, err = time.Parse("2006-01-02", val.End.Date)
+					isAllDay = true
+				}
+				if err != nil {
+					log.Printf("Failed to parse end time in event '%s': %v", val.Summary, err)
+					continue
+				}
+
+				resEvents <- GanttTask{
+					Name:      val.Summary,
+					StartTime: start,
+					EndTime:   end,
+					IsAllDay:  isAllDay,
+				}
+			}
+		}()
+	}
+
+	var wg sync.WaitGroup
+	w.Header().Set("Content-Type", "application/json")
+
+	events := make([]GanttTask, 0, len(eventsArr))
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for val := range resEvents {
+			events = append(events, val)
+		}
+	}()
+
+	wgWorkers.Wait()
+	close(resEvents)
+
+	wg.Wait()
+	err = json.NewEncoder(w).Encode(events)
+	if err != nil {
+		http.Error(w, "Failed to encode events: "+err.Error(), http.StatusInternalServerError)
+		log.Printf("Failed to encode events in %s with err: %v", op, err)
+		return
+	}
+}
+
+func normalizeToDay(t time.Time) time.Time {
+	return time.Date(
+		t.Year(),
+		t.Month(),
+		t.Day(),
+		0, 0, 0, 0,
+		t.Location(),
+	)
+}
+
+func (cal *CalendarHandler) HandleGetCalendars(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	calendars, err := cal.calendarStorage.GetUserCalendars(r.Context())
+	if err != nil {
+		http.Error(w, "Failed to load calendars: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(calendars)
+}
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\internal\handlers\chat.go
+==================================================
+package handlers
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"html"
+	"io"
+	"life_forge/internal/ai"
+	"life_forge/internal/models"
+	"life_forge/internal/storage"
+	"life_forge/internal/usecases"
+	"log"
+	"net/http"
+	"strings"
+	"time"
+)
+
+type ChatHandler struct {
+	contextStorage  *storage.ContextStorage
+	aiClient        *ai.GigaChatClient
+	calendarStorage *storage.GoogleCalendarStorage
+}
+
+func NewChatHandler(contextStorage *storage.ContextStorage, aiClient *ai.GigaChatClient, calendarStorage *storage.GoogleCalendarStorage) *ChatHandler {
+	return &ChatHandler{
+		contextStorage:  contextStorage,
+		aiClient:        aiClient,
+		calendarStorage: calendarStorage,
+	}
+}
+
+func (ch *ChatHandler) HandleChat(w http.ResponseWriter, r *http.Request) {
+	op := "internal/handlers/chat.go HandleChat"
+
+	log.Println("New request /chat")
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("%s: read body error: %v", op, err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	bodyReader := bytes.NewReader(bodyBytes)
+
+	var user_question struct{ Text string }
+	var message string
+
+	contentType := r.Header.Get("Content-Type")
+	log.Printf("Content-Type: %s", contentType)
+
+	if strings.Contains(contentType, "application/json") {
+		if err := json.NewDecoder(bodyReader).Decode(&user_question); err != nil {
+			log.Printf("%s: decode json error: %v", op, err)
+			http.Error(w, `{"error": "Invalid JSON format"}`, http.StatusBadRequest)
+			return
+		}
+		message = user_question.Text
+		log.Printf("JSON decode succesfully: Text = '%s'", message)
+	} else {
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		if err := r.ParseForm(); err != nil {
+			log.Printf("%s: parse form error: %v", op, err)
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			return
+		}
+		message = r.FormValue("message")
+		if message == "" {
+			message = r.FormValue("text")
+		}
+		log.Printf("Form decoded: message = '%s'", message)
+	}
+
+	if message == "" {
+		log.Printf("%s: empty message", op)
+		http.Error(w, `{"error": "No message provided"}`, http.StatusBadRequest)
+		return
+	}
+
+	calendarData := ch.calendarStorage.GetCalendarPreview(r.Context(), 5)
+	log.Printf("📅 Calendar data: %d symbols", len(calendarData))
+
+	now := time.Now()
+	timeContext := fmt.Sprintf("ВНИМАНИЕ! Сегодня: %s. Завтра: %s. Текущее время: %s. Все даты в JSON должны вычисляться относительно сегодня, используй часовой пояс +03:00 вместо Z!",
+		now.Format("2006-01-02"),
+		now.AddDate(0, 0, 1).Format("2006-01-02"),
+		now.Format("15:04"))
+	//запрос от пользователя (вместе с базовым промтом)
+	promt_calendar := fmt.Sprintf("%s\n%s \n запрос от пользователя:%s\n %s", storage.PROMT_CALENDAR, calendarData, message, timeContext)
+
+	response, err := makeRequestToAIGetResponse(r.Context(), ch, promt_calendar)
+	if err != nil {
+		log.Printf("%s: AI calendar error: %v", op, err)
+		http.Error(w, `{"error": "AI service error"}`, http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Answer from AI: %d symbols", len(response))
+
+	user_answer_calendar, events, err := usecases.ParseCalendarAIResponse(response)
+	if err != nil {
+		log.Printf("%s: parse calendar response error: %v", op, err)
+	}
+
+	log.Printf("Parsing events: %d events", len(events))
+	saveEvents(ch, events)
+
+	// ui
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+		htmlResponse := fmt.Sprintf(`
+            <div class="message p-4 rounded-2xl bg-gradient-to-r from-green-100 to-emerald-50 border border-green-200 max-w-3xl animate-slide-in mb-4">
+                <div class="mb-1 font-semibold text-green-800">🤖 LifeForge AI:</div>
+                <div class="text-gray-800">%s</div>
+                %s
+            </div>`,
+			html.EscapeString(user_answer_calendar),
+			formatEventsHTML(events))
+
+		fmt.Fprint(w, htmlResponse)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	answ := user_answer_calendar
+	if answ == "" {
+		answ = "✅ Task completed!"
+	}
+
+	responseData := map[string]interface{}{
+		"response":         answ,
+		"events_count":     len(events),
+		"calendar_preview": len(calendarData) > 50,
+		"status":           "success",
+	}
+
+	if err := json.NewEncoder(w).Encode(responseData); err != nil {
+		log.Printf("%s: encode response error: %v", op, err)
+		http.Error(w, `{"error": "Failed to encode response"}`, http.StatusInternalServerError)
+		return
+	}
+}
+
+func saveEvents(ch *ChatHandler, events []*models.EventRequest) {
+	workers := make(chan struct{}, 5)
+
+	for i, event := range events {
+
+		workers <- struct{}{}
+
+		go func(event *models.EventRequest) {
+			defer func() {
+				<-workers
+			}()
+			if event.IsEvent && event.Title != "" {
+				log.Printf("Event %d: %s", i+1, event.Title)
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+
+				createdEvent, err := ch.calendarStorage.CreateEvent(ctx, *event)
+				if err != nil {
+					log.Printf("❌ Error to create event '%s': %v", event.Title, err)
+				} else {
+					log.Printf("✅ Event created: %s (ID: %s)", event.Title, createdEvent.Id)
+				}
+
+				err = ch.calendarStorage.SaveEventInDB(ctx, event)
+				if err != nil {
+					log.Printf("❌ Error to save event in db '%s': %v", event.Title, err)
+				} else {
+					log.Printf("✅ Event saved in db: %s", event.Title)
+				}
+			}
+		}(event)
+	}
+}
+
+// func mergeContexts(oldContext, newUpdates models.Context) models.Context {
+// 	result := oldContext
+
+// 	if len(newUpdates.Goals) > 0 {
+// 		result.Goals = newUpdates.Goals
+// 	}
+
+// 	if len(newUpdates.Recent5) > 0 {
+// 		result.Recent5 = newUpdates.Recent5
+// 	}
+
+// 	if len(newUpdates.Progress) > 0 {
+// 		if result.Progress == nil {
+// 			result.Progress = make(map[string]string)
+// 		}
+// 		for k, v := range newUpdates.Progress {
+// 			result.Progress[k] = v
+// 		}
+// 	}
+
+// 	return result
+// }
+
+func makeRequestToAIGetResponse(ctx context.Context, ch *ChatHandler, prompt string) (string, error) {
+	op := "handlers.makeRequestToAIGetResponse"
+	response, err := ch.aiClient.Generate(ctx, prompt)
+	if err != nil {
+		log.Printf("%s: AI error: %v", op, err)
+		return "", err
+	}
+	return response, nil
+}
+
+// frontend
+func formatEventsHTML(events []*models.EventRequest) string {
+	if len(events) == 0 {
+		return `<div class="mt-2 text-xs text-green-600">✅ Calendar checked, dont need new events</div>`
+	}
+
+	var htmlEvents strings.Builder
+	htmlEvents.WriteString(`<div class="mt-3 pt-3 border-t border-green-200 space-y-2">`)
+	htmlEvents.WriteString(`<div class="text-sm font-semibold text-green-700">📅 Created events:</div>`)
+
+	for i, event := range events {
+		if !event.IsEvent || event.Title == "" {
+			continue
+		}
+
+		title := html.EscapeString(event.Title)
+		timeStr := "сегодня"
+		if event.StartTime != nil {
+			timeStr = event.StartTime.Format("02.01 в 15:04")
+		}
+
+		duration := ""
+		if event.DurationHours != nil {
+			hours := *event.DurationHours
+			if hours == 1 {
+				duration = "1 час"
+			} else if hours < 1 {
+				duration = fmt.Sprintf("%.0f минут", hours*60)
+			} else {
+				duration = fmt.Sprintf("%.1f часа", hours)
+			}
+		}
+
+		htmlEvents.WriteString(fmt.Sprintf(`
+            <div class="p-2 bg-green-50 rounded-lg border border-green-200">
+                <div class="font-medium text-green-800">%d. %s</div>
+                <div class="text-xs text-green-600">⏰ %s • %s</div>
+            </div>`, i+1, title, timeStr, duration))
+	}
+
+	htmlEvents.WriteString(`</div>`)
+	return htmlEvents.String()
+}
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\internal\models\context.go
+==================================================
+package models
+
+type Context struct {
+	ID       int               `json:"id" db:"id"`
+	Goals    []string          `json:"goals" db:"goals"`
+	Recent5  []string          `json:"recent5" db:"recent5"`
+	Progress map[string]string `json:"progress" db:"progress"`
+}
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\internal\models\event.go
+==================================================
+package models
+
+import (
+	"time"
+)
+
+type EventRequest struct {
+	ID            int        `json:"id" db:"id"`
+	IsEvent       bool       `json:"is_event" db:"is_event"`
+	Title         string     `json:"title" db:"title"`
+	StartTime     *time.Time `json:"start_time,omitempty" db:"start_time"`
+	DurationHours *float64   `json:"duration,omitempty" db:"duration_hours"`
+	Recurrence    *string    `json:"recurrence,omitempty" db:"recurrence"`
+	Description   *string    `json:"description,omitempty" db:"description"`
+}
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\internal\storage\const.go
+==================================================
+package storage
+
+const (
+	PROMT_CALENDAR = `
+**ТЫ АССИСТЕНТ ДЛЯ КАЛЕНДАРЯ. ВСЕГДА ОТВЕЧАЙ СТРОГО В УКАЗАННОМ ФОРМАТЕ!**
+
+## 🎯 ПРАВИЛА ОТВЕТА (ВАЖНО!):
+1. **Текст ответа пользователю** - подробно, разные вариации плана, ссылки.
+2. **ТОЛЬКО после текста** добавь разделитель
+3. **JSON событий** после разделителя
+4. **БОЛЬШЕ НИЧЕГО НЕ ПИШИ!**
+
+## 📋 ФОРМАТ ОТВЕТА (ОБЯЗАТЕЛЬНО!):
+[Текст ответа пользователю]
+
+|||CALENDAR_EVENT|||
+[JSON или массив JSON]
+|||CALENDAR_EVENT|||
+
+## 🎯 ЛОГИКА СОБЫТИЙ:
+
+### 1. ЯВНЫЕ СОБЫТИЯ → СОЗДАВАЙ СРАЗУ
+Если пользователь **КОМАНДУЕТ** создать событие:
+- "запиши/создай/добавь/запланируй встреча завтра 18:00"
+- "поставь напоминание/напомни учить Go каждый день"
+
+**Действие:** Создай JSON с "is_event": true
+**ВАЖНО:** Сохраняй время ТОЧНО как сказал пользователь! Если "в 8:00" - ставь 08:00, если "в 18:00" - ставь 18:00!
+
+### 2. НЕЯВНЫЕ ЦЕЛИ → ПРЕДЛОЖИ ВАРИАНТЫ
+Если пользователь делится **ИДЕЕЙ/ПЛАНОМ** без команды:
+- "хочу учить Go 2 месяца по такому то плану"
+- "планирую бегать по утрам"
+
+**Действие:** 
+1. Дай советы
+2. Предложи варианты  
+3. "is_event": false
+4. Жди подтверждения
+
+## 📅 ФОРМАТ JSON (СТРОГО!):
+
+**Одно событие:**
+{
+  "is_event": true,
+  "title": "Название события",
+  "start_time": "2026-02-09T08:00:00+03:00",
+  "duration": 1.5,
+  "recurrence": "daily",
+  "description": "Описание"
+}
+
+**Несколько событий:**
+[
+  {"is_event": true, "title": "Событие 1", "start_time": "2026-03-23T08:00:00+03:00", "duration": 2.0},
+  {"is_event": true, "title": "Событие 2", "start_time":"2026-01-19T08:00:00+03:00", "duration": 0.5}
+]
+
+**Рекурренции:**
+"каждый день" → "daily"
+"каждую неделю" → "weekly"
+"каждый месяц" → "monthly"
+
+**Длительность:**
+"2 часа" → 2.0
+"30 минут" → 0.5
+"1.5 часа" → 1.5
+
+## 📋 ПРИМЕРЫ (ДЕЛАЙ ТОЧНО ТАК!):
+
+**Пример 1: ЯВНОЕ СОБЫТИЕ НА СЕГОДНЯ**
+Пользователь: "создай событие сегодня в 18:00 убраться дома"
+
+Ответ:
+Убраться дома запланировано на сегодня 18:00!
+
+|||CALENDAR_EVENT|||
+{"is_event":true,"title":"Убраться дома","start_time":"2026-02-08T18:00:00+03:00","duration":1.0}
+|||CALENDAR_EVENT|||
+
+**Пример 2: ЯВНОЕ СОБЫТИЕ НА ЗАВТРА**
+Пользователь: "запиши завтра в 14:00 встречу с клиентом"
+
+Ответ:
+Встреча с клиентом запланирована на завтра в 14:00!
+
+|||CALENDAR_EVENT|||
+{"is_event":true,"title":"Встреча с клиентом","start_time":"2026-02-09T14:00:00+03:00","duration":1.0}
+|||CALENDAR_EVENT|||
+
+**Пример 3: ДВА СОБЫТИЯ НА ЗАВТРА С РАЗНЫМ ВРЕМЕНЕМ**
+Пользователь: "создай события на завтра: тренировка в 8:00 и учеба в 18:00"
+
+Ответ:
+Два события созданы на завтра!
+
+|||CALENDAR_EVENT|||
+[
+  {"is_event":true,"title":"Тренировка","start_time":"2026-02-09T08:00:00+03:00","duration":1.5},
+  {"is_event":true,"title":"Учеба","start_time":"2026-02-09T18:00:00+03:00","duration":2.0}
+]
+|||CALENDAR_EVENT|||
+
+**Пример 4: ДВА СОБЫТИЯ С РАЗНЫМ ВРЕМЕНЕМ (8:00 и 10:00)**
+Пользователь: "запиши на завтра поехать в Москву в 8:00 и поесть в макдональдсе в 10:00"
+
+Ответ:
+Два события созданы на завтра!
+
+|||CALENDAR_EVENT|||
+[
+  {"is_event":true,"title":"Поехать в Москву","start_time":"2026-02-09T08:00:00+03:00","duration":1.0},
+  {"is_event":true,"title":"Поесть в Макдональдсе","start_time":"2026-02-09T10:00:00+03:00","duration":1.0}
+]
+|||CALENDAR_EVENT|||
+
+**Пример 5: НЕЯВНАЯ ЦЕЛЬ**
+Пользователь: "хочу начать бегать"
+
+Ответ:
+Отличная идея! Предлагаю варианты:
+1. Бег по утрам 3 раза в неделю в 7:00
+2. Вечерние пробежки после работы в 19:00
+
+Какой вариант создадим?
+
+|||CALENDAR_EVENT|||
+{"is_event":false}
+|||CALENDAR_EVENT|||
+
+## 🚨 ВАЖНЫЕ ПРАВИЛА О ВРЕМЕНИ:
+1. **Сохраняй время ТОЧНО как сказал пользователь!** 
+2. Если пользователь говорит "в 8:00" - ставь 08:00:00 (не 11:00!)
+3. Если "в 18:00" - ставь 18:00:00 (не 13:00!)  
+4. Если "в 10:00" - ставь 10:00:00
+5. НЕ меняй время на своё усмотрение!
+6. Используй 24-часовой формат
+7. Если время не указано - используй разумное по умолчанию (например, 18:00)
+
+## 🚨 ЧТО НЕ ДЕЛАТЬ:
+- Не добавляй текст после второго разделителя
+- Не пиши объяснения формата
+- Не создавай события без явной команды
+- Не меняй время, указанное пользователем!
+- Не объединяй несколько событий в одно!
+- Не путай время 8:00 с 11:00 или 10:00 с 13:00!
+
+**ВНИМАНИЕ: Используй РАЗДЕЛИТЕЛЬ ТОЧНО ТАК: |||CALENDAR_EVENT|||
+НЕ ДЕЛАЙ ОПЕЧАТОК! НЕ ПИШИ CALENDER! ТОЛЬКО CALENDAR!**
+
+## ✅ КОГДА СОЗДАВАТЬ СОБЫТИЯ:
+Только если есть слова: "запиши", "создай", "добавь", "поставь", "напомни", "запланируй", "организуй"
+
+Твоя задача: понять запрос, сохранить время как сказал пользователь, и вернуть JSON событий.
+`
+)
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\internal\storage\context.go
+==================================================
+package storage
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"life_forge/internal/models"
+	"log"
+)
+
+type ContextStorage struct {
+	pool *pgxpool.Pool
+}
+
+func NewContextStorage(pool *pgxpool.Pool) *ContextStorage {
+	return &ContextStorage{
+		pool: pool,
+	}
+}
+
+func (db_ct *ContextStorage) GetContextByID(ctx context.Context, id int) (models.Context, error) {
+
+	op := "internal/storage/context.go GetContextByID"
+
+	sql_query := `
+	SELECT id, goals, recent5, progress FROM Context
+	WHERE id = $1
+	`
+
+	var context models.Context
+	var progressJSON []byte
+
+	err := db_ct.pool.QueryRow(ctx, sql_query, id).Scan(
+		&context.ID,
+		&context.Goals, //pgx TEXT[] -> []string
+		&context.Recent5,
+		&progressJSON,
+	)
+
+	if err != nil {
+		log.Println("Error with QueryRow method in ", op, " with error: ", err)
+		return models.Context{}, nil
+	}
+
+	context.Goals = []string{}
+	context.Recent5 = []string{}
+	context.Progress = map[string]string{}
+
+	if context.Goals == nil {
+		context.Goals = []string{}
+	}
+	if context.Recent5 == nil {
+		context.Recent5 = []string{}
+	}
+
+	context.Progress = make(map[string]string)
+
+	if len(progressJSON) > 0 && string(progressJSON) != "null" {
+		if err := json.Unmarshal(progressJSON, &context.Progress); err != nil {
+			log.Println("Failed to unmarshal json (progressJSON) in ", op, "with error: ", err)
+		}
+	}
+
+	return context, nil
+}
+
+func (db_ct *ContextStorage) SaveContext(ctx context.Context, contextData *models.Context) error {
+	op := "internal/storage/context.go SaveContext"
+
+	progressJSON, err := json.Marshal(contextData.Progress)
+	if err != nil {
+		log.Println("Failed to marshal progress in ", op, "with error: ", err)
+		return fmt.Errorf("%s: failed to marshal progress: %w", op, err)
+	}
+
+	sql_query := `
+	INSERT INTO Context (id, goals, recent5, progress) VALUES ($1, $2, $3, $4)
+	ON CONFLICT (id) DO UPDATE SET
+	goals = EXCLUDED.goals,
+	recent5 = EXCLUDED.recent5,
+	progress = EXCLUDED.progress
+	`
+
+	_, err = db_ct.pool.Exec(ctx, sql_query,
+		contextData.ID,
+		contextData.Goals, // pgx []string -> TEXT[]
+		contextData.Recent5,
+		progressJSON,
+	)
+
+	if err != nil {
+		log.Println("Error with Exec method in ", op, " with error: ", err)
+		return fmt.Errorf("%s: failed to save context data: %w", op, err)
+	}
+
+	return nil
+}
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\internal\storage\google_calendar.go
+==================================================
+package storage
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"life_forge/internal/models"
+	"log"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
+	"google.golang.org/api/calendar/v3"
+	"google.golang.org/api/option"
+)
+
+const (
+	whereSaveEvent = "primary"
+)
+
+type GoogleCalendarStorage struct {
+	service *calendar.Service
+	config  *oauth2.Config
+	pool    *pgxpool.Pool
+}
+
+func NewGoogleCalendarStorage(pool *pgxpool.Pool) (*GoogleCalendarStorage, error) {
+	data, err := os.ReadFile("credentials.json")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read credentials.json: %w", err)
+	}
+
+	config, err := google.ConfigFromJSON(data, calendar.CalendarScope)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create config: %w", err)
+	}
+
+	client, err := getClient(config)
+	if err != nil {
+		return &GoogleCalendarStorage{config: config, pool: pool}, nil
+	}
+
+	service, err := calendar.NewService(context.Background(), option.WithHTTPClient(client))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Calendar service: %w", err)
+	}
+
+	return &GoogleCalendarStorage{service: service, config: config, pool: pool}, nil
+}
+
+func (gcs *GoogleCalendarStorage) IsAuthorized() bool {
+	return gcs.service != nil
+}
+
+// GetAuthURL returns url for login
+func (gcs *GoogleCalendarStorage) GetAuthURL() string {
+	return gcs.config.AuthCodeURL(
+		"state-token",
+		oauth2.AccessTypeOffline,
+		oauth2.SetAuthURLParam("prompt", "consent"), // принудительный запрос согласия
+	)
+}
+
+// ExchangeCode change code from Google on token and save it
+func (gcs *GoogleCalendarStorage) ExchangeCode(code string) error {
+	tok, err := gcs.config.Exchange(context.Background(), code)
+	if err != nil {
+		return fmt.Errorf("unable to retrieve token from web: %w", err)
+	}
+	saveToken("token.json", tok)
+
+	client := gcs.config.Client(context.Background(), tok)
+	service, err := calendar.NewService(context.Background(), option.WithHTTPClient(client))
+	if err != nil {
+		return fmt.Errorf("failed to create service: %w", err)
+	}
+	gcs.service = service
+	return nil
+}
+
+//==========================================
+
+func getClient(config *oauth2.Config) (*http.Client, error) {
+	tokFile := "token.json"
+	tok, err := tokenFromFile(tokFile)
+	if err != nil {
+		return nil, err
+	}
+	return config.Client(context.Background(), tok), nil
+}
+
+func tokenFromFile(file string) (*oauth2.Token, error) {
+	f, err := os.Open(file)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	tok := &oauth2.Token{}
+	err = json.NewDecoder(f).Decode(tok)
+	return tok, err
+}
+
+func saveToken(path string, token *oauth2.Token) {
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		log.Printf("Unable to cache oauth token: %v", err)
+		return
+	}
+	defer f.Close()
+	json.NewEncoder(f).Encode(token)
+}
+
+func (gcs *GoogleCalendarStorage) CreateEvent(ctx context.Context, event models.EventRequest) (*calendar.Event, error) {
+	if event.StartTime == nil {
+		log.Println("start time is required")
+	}
+
+	startTime := *event.StartTime
+	var endTime time.Time
+
+	if event.DurationHours != nil {
+		endTime = startTime.Add(time.Duration(*event.DurationHours * float64(time.Hour)))
+	} else {
+		endTime = startTime.Add(time.Hour)
+	}
+
+	googleEvent := &calendar.Event{
+		Summary: event.Title,
+		Start: &calendar.EventDateTime{
+			DateTime: startTime.Format(time.RFC3339),
+			TimeZone: "Europe/Moscow",
+		},
+		End: &calendar.EventDateTime{
+			DateTime: endTime.Format(time.RFC3339),
+			TimeZone: "Europe/Moscow",
+		},
+	}
+
+	if event.Recurrence != nil && *event.Recurrence != "" {
+		recurrenceRule := formatRecurrenceRule(*event.Recurrence)
+		if recurrenceRule != "" {
+			googleEvent.Recurrence = []string{recurrenceRule}
+			log.Printf("📅 Устанавливаем рекуррентность: %s", recurrenceRule)
+		}
+	}
+
+	if event.Description != nil {
+		googleEvent.Description = *event.Description
+	}
+
+	return gcs.service.Events.Insert("primary", googleEvent).Context(ctx).Do()
+}
+
+func formatRecurrenceRule(recurrence string) string {
+	switch strings.ToUpper(recurrence) {
+	case "DAILY":
+		return "RRULE:FREQ=DAILY"
+	case "WEEKLY":
+		return "RRULE:FREQ=WEEKLY"
+	case "MONTHLY":
+		return "RRULE:FREQ=MONTHLY"
+	case "YEARLY":
+		return "RRULE:FREQ=YEARLY"
+	default:
+		if strings.HasPrefix(strings.ToUpper(recurrence), "RRULE:") {
+			return recurrence
+		}
+		return fmt.Sprintf("RRULE:FREQ=%s", strings.ToUpper(recurrence))
+	}
+}
+
+func (gcs *GoogleCalendarStorage) SaveEventInDB(ctx context.Context, event *models.EventRequest) error {
+	op := "internal/storage/google_calendar.go SaveEvent"
+
+	sql_query := `
+	INSERT INTO events (is_event, title, start_time, duration_hours, recurrence, description) VALUES ($1, $2, $3, $4, $5, $6)
+	`
+
+	_, err := gcs.pool.Exec(ctx, sql_query,
+		event.IsEvent,
+		event.Title,
+		event.StartTime,
+		event.DurationHours,
+		event.Recurrence,
+		event.Description,
+	)
+
+	if err != nil {
+		log.Println("Error with Exec method in ", op, " with error: ", err)
+		return fmt.Errorf("%s: failed to save context data: %w", op, err)
+	}
+
+	return nil
+}
+
+func (gcs *GoogleCalendarStorage) ListEvents(ctx context.Context, timeMin, timeMax time.Time, calendarIDs ...string) ([]*calendar.Event, error) {
+	if gcs.service == nil {
+		return nil, fmt.Errorf("Календарь не подключен. Перейдите по /auth/google для авторизации.")
+	}
+	timeMinStr := timeMin.Format(time.RFC3339)
+	timeMaxStr := timeMax.Format(time.RFC3339)
+
+	if len(calendarIDs) == 0 {
+		calendarIDs = []string{"primary"}
+	}
+
+	var allEvents []*calendar.Event
+
+	for _, cid := range calendarIDs {
+		events, err := gcs.service.Events.List(cid).
+			TimeMin(timeMinStr).
+			TimeMax(timeMaxStr).
+			SingleEvents(true).
+			OrderBy("startTime").
+			Context(ctx).
+			Do()
+
+		if err != nil {
+			log.Printf("failed to list events for %s: %v", cid, err)
+			continue
+		}
+		allEvents = append(allEvents, events.Items...)
+	}
+
+	return allEvents, nil
+}
+
+// GetUserCalendars returns user's calendar list
+func (gcs *GoogleCalendarStorage) GetUserCalendars(ctx context.Context) ([]*calendar.CalendarListEntry, error) {
+	if gcs.service == nil {
+		return nil, fmt.Errorf("Календарь не авторизован")
+	}
+	list, err := gcs.service.CalendarList.List().Context(ctx).Do()
+	if err != nil {
+		return nil, err
+	}
+	return list.Items, nil
+}
+
+func (gcs *GoogleCalendarStorage) GetCalendarPreview(ctx context.Context, days int) string {
+	timeMin := time.Now().UTC()
+	timeMax := time.Now().AddDate(0, 0, days).UTC()
+	events, err := gcs.ListEvents(ctx, timeMin, timeMax)
+	if err != nil {
+		return fmt.Sprintf("Error to load calendar: %v", err)
+	}
+
+	if len(events) == 0 {
+		return "No events"
+	}
+
+	var preview strings.Builder
+	preview.WriteString("Closest events:\n")
+
+	for _, event := range events {
+		start := event.Start.DateTime
+		if start == "" {
+			start = event.Start.Date
+		}
+		preview.WriteString(fmt.Sprintf("- %s: %s\n", start, event.Summary))
+	}
+
+	return preview.String()
+}
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\internal\usecases\parsing_promt_calendar.go
+==================================================
+package usecases
+
+import (
+	"encoding/json"
+	"fmt"
+	"life_forge/internal/models"
+	"strings"
+	"time"
+)
+
+const CALENDAR_SEPARATOR = "|||CALENDAR_EVENT|||"
+
+func ParseCalendarAIResponse(response string) (string, []*models.EventRequest, error) {
+	logParse("Parsing...")
+
+	cleanedResponse := cleanResponse(response)
+
+	if !strings.Contains(cleanedResponse, CALENDAR_SEPARATOR) {
+		text := strings.TrimSpace(cleanedResponse)
+		logParse("No separator, return text: %s", text)
+		return text, nil, nil
+	}
+
+	// split
+	parts := strings.SplitN(cleanedResponse, CALENDAR_SEPARATOR, 3)
+	if len(parts) < 2 {
+		text := strings.TrimSpace(cleanedResponse)
+		logParse("Not enough parts, return text: %s", text)
+		return text, nil, nil
+	}
+
+	userAnswer := strings.TrimSpace(parts[0])
+
+	jsonPart := strings.TrimSpace(parts[1])
+
+	// clean json
+	jsonPart = strings.ReplaceAll(jsonPart, CALENDAR_SEPARATOR, "")
+	jsonPart = strings.TrimSpace(jsonPart)
+
+	if jsonPart == "" || jsonPart == "{}" || jsonPart == "[]" {
+		logParse("Empty json")
+		return userAnswer, nil, nil
+	}
+
+	events, err := parseCalendarJSON(jsonPart)
+	if err != nil {
+		logParse("Error parsing JSON: %v", err)
+		return userAnswer, nil, fmt.Errorf("error parsing JSON: %w", err)
+	}
+
+	logParse("Succesfully parsed %d events", len(events))
+	return userAnswer, events, nil
+}
+
+func cleanResponse(response string) string {
+	lines := strings.Split(response, "\n")
+	var cleanedLines []string
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if i == 0 && (strings.HasPrefix(trimmed, "Ответ ИИ") ||
+			strings.HasPrefix(trimmed, "Ответ:") ||
+			strings.HasPrefix(trimmed, "Answer:")) {
+			continue
+		}
+		if trimmed != "" {
+			cleanedLines = append(cleanedLines, trimmed)
+		}
+	}
+
+	return strings.Join(cleanedLines, "\n")
+}
+
+func parseCalendarJSON(jsonText string) ([]*models.EventRequest, error) {
+	if strings.HasPrefix(jsonText, "[") {
+		return parseJSONArray(jsonText)
+	}
+	return parseSingleEvent(jsonText)
+}
+
+func parseJSONArray(jsonText string) ([]*models.EventRequest, error) {
+	var tempEvents []struct {
+		IsEvent     bool     `json:"is_event"`
+		Title       string   `json:"title"`
+		StartTime   *string  `json:"start_time"`
+		Duration    *float64 `json:"duration"`
+		Recurrence  *string  `json:"recurrence"`
+		Description *string  `json:"description"`
+	}
+
+	if err := json.Unmarshal([]byte(jsonText), &tempEvents); err != nil {
+		logParse("error parsing array: %v", err)
+		return nil, fmt.Errorf("wrong JSON array: %w", err)
+	}
+
+	var events []*models.EventRequest
+	for i, tempEvent := range tempEvents {
+		if !tempEvent.IsEvent {
+			logParse("Event %d skiped (is_event=false)", i+1)
+			continue
+		}
+
+		event, err := createEventFromTemp(tempEvent)
+		if err != nil {
+			logParse("Error create event %d: %v", i+1, err)
+			return nil, err
+		}
+
+		events = append(events, event)
+		logParse("Event %d created: %s", i+1, event.Title)
+	}
+
+	return events, nil
+}
+
+func parseSingleEvent(jsonText string) ([]*models.EventRequest, error) {
+	var tempEvent struct {
+		IsEvent     bool     `json:"is_event"`
+		Title       string   `json:"title"`
+		StartTime   *string  `json:"start_time"`
+		Duration    *float64 `json:"duration"`
+		Recurrence  *string  `json:"recurrence"`
+		Description *string  `json:"description"`
+	}
+
+	if err := json.Unmarshal([]byte(jsonText), &tempEvent); err != nil {
+		logParse("Error parsing object: %v", err)
+		return nil, fmt.Errorf("wrong json object: %w \n%s", err, jsonText)
+	}
+
+	if !tempEvent.IsEvent {
+		logParse("Event skiped (is_event=false)")
+		return nil, nil
+	}
+
+	event, err := createEventFromTemp(tempEvent)
+	if err != nil {
+		logParse("Error create event: %v", err)
+		return nil, err
+	}
+
+	logParse("Event created: %s", event.Title)
+	return []*models.EventRequest{event}, nil
+}
+
+func createEventFromTemp(tempEvent struct {
+	IsEvent     bool     `json:"is_event"`
+	Title       string   `json:"title"`
+	StartTime   *string  `json:"start_time"`
+	Duration    *float64 `json:"duration"`
+	Recurrence  *string  `json:"recurrence"`
+	Description *string  `json:"description"`
+}) (*models.EventRequest, error) {
+
+	event := &models.EventRequest{
+		IsEvent:       tempEvent.IsEvent,
+		Title:         tempEvent.Title,
+		DurationHours: tempEvent.Duration,
+		Recurrence:    tempEvent.Recurrence,
+		Description:   tempEvent.Description,
+	}
+
+	//time parsing
+	if tempEvent.StartTime != nil && *tempEvent.StartTime != "" {
+		parsedTime, err := time.Parse(time.RFC3339, *tempEvent.StartTime)
+		if err != nil {
+			parsedTime, err = time.Parse("2006-01-02T15:04:05Z", *tempEvent.StartTime)
+			if err != nil {
+				logParse("wrong time format: %s", *tempEvent.StartTime)
+				return nil, fmt.Errorf("wrong time format: %s", *tempEvent.StartTime)
+			}
+		}
+		event.StartTime = &parsedTime
+		logParse("Event startTime: %v", event.StartTime)
+	}
+
+	return event, nil
+}
+
+func logParse(format string, args ...interface{}) {
+	fmt.Printf("[PARSE] "+format+"\n", args...)
+}
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\internal\usecases\parsing_promt_db.go
+==================================================
+package usecases
+
+import (
+	"life_forge/internal/models"
+	"strings"
+)
+
+const SEPARATOR = "|||UPDATE_DATA|||"
+
+func ParseAIResponse(response string) (userAnswer string, updatedContext models.Context) {
+	if !strings.Contains(response, SEPARATOR) {
+		return strings.TrimSpace(response), models.Context{}
+	}
+
+	parts := strings.SplitN(response, SEPARATOR, 3)
+	if len(parts) < 2 {
+		return strings.TrimSpace(parts[0]), models.Context{}
+	}
+
+	// Ответ (часть до первого SEPARATOR)
+	userAnswer = strings.TrimSpace(parts[0])
+	userAnswer = strings.TrimPrefix(userAnswer, "Ответ:")
+	userAnswer = strings.TrimSpace(userAnswer)
+
+	// Обновления (между SEPARATOR)
+	updatesText := parts[1]
+	parseUpdates(updatesText, &updatedContext)
+
+	return userAnswer, updatedContext
+}
+
+func parseUpdates(updatesText string, ctx *models.Context) {
+	tempCtx := models.Context{
+		Goals:    []string{},
+		Recent5:  []string{},
+		Progress: make(map[string]string),
+	}
+
+	for _, line := range strings.Split(updatesText, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		switch {
+		case strings.HasPrefix(line, "Цели:"):
+			// Цели через запятую
+			goalsText := strings.TrimPrefix(line, "Цели:")
+			goalsText = strings.TrimSpace(goalsText)
+			tempCtx.Goals = parseGoals(goalsText)
+
+		case strings.HasPrefix(line, "Недавние действия:"):
+			// Недавние действия через запятую
+			recentText := strings.TrimPrefix(line, "Недавние действия:")
+			recentText = strings.TrimSpace(recentText)
+			tempCtx.Recent5 = parseGoals(recentText)
+
+		case strings.HasPrefix(line, "Прогресс:"):
+			// Прогресс в формате "ключ:значение"
+			progressText := strings.TrimPrefix(line, "Прогресс:")
+			progressText = strings.TrimSpace(progressText)
+			progressMap := parseProgress(progressText)
+
+			for k, v := range progressMap {
+				tempCtx.Progress[k] = v
+			}
+		}
+	}
+
+	if len(tempCtx.Goals) > 0 {
+		ctx.Goals = tempCtx.Goals
+	}
+	if len(tempCtx.Recent5) > 0 {
+		ctx.Recent5 = tempCtx.Recent5
+	}
+	if len(tempCtx.Progress) > 0 {
+		ctx.Progress = tempCtx.Progress
+	}
+}
+
+func parseGoals(text string) []string {
+	var result []string
+
+	items := strings.Split(text, ",")
+	for _, item := range items {
+		trimmed := strings.TrimSpace(item)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
+
+func parseProgress(text string) map[string]string {
+	result := make(map[string]string)
+
+	items := strings.Split(text, ",")
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+
+		if idx := strings.Index(item, ":"); idx > 0 {
+			key := strings.TrimSpace(item[:idx])
+			val := strings.TrimSpace(item[idx+1:])
+			if key != "" && val != "" {
+				result[key] = val
+			}
+		}
+	}
+	return result
+}
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\go.mod
+==================================================
+module life_forge
+
+go 1.24.5
+
+require (
+	github.com/jackc/pgx/v5 v5.8.0
+	github.com/joho/godotenv v1.5.1
+)
+
+require (
+	cloud.google.com/go/auth v0.18.1 // indirect
+	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
+	cloud.google.com/go/compute/metadata v0.9.0 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/felixge/httpsnoop v1.0.4 // indirect
+	github.com/go-logr/logr v1.4.3 // indirect
+	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/google/s2a-go v0.1.9 // indirect
+	github.com/google/uuid v1.6.0 // indirect
+	github.com/googleapis/enterprise-certificate-proxy v0.3.11 // indirect
+	github.com/googleapis/gax-go/v2 v2.16.0 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/kelseyhightower/envconfig v1.4.0 // indirect
+	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0 // indirect
+	go.opentelemetry.io/otel v1.39.0 // indirect
+	go.opentelemetry.io/otel/metric v1.39.0 // indirect
+	go.opentelemetry.io/otel/trace v1.39.0 // indirect
+	go.uber.org/multierr v1.10.0 // indirect
+	go.uber.org/zap v1.28.0 // indirect
+	golang.org/x/crypto v0.47.0 // indirect
+	golang.org/x/net v0.49.0 // indirect
+	golang.org/x/oauth2 v0.34.0 // indirect
+	golang.org/x/sync v0.19.0 // indirect
+	golang.org/x/sys v0.40.0 // indirect
+	golang.org/x/text v0.33.0 // indirect
+	google.golang.org/api v0.265.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260128011058-8636f8732409 // indirect
+	google.golang.org/grpc v1.78.0 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
+)
+
+
+
+==================================================
+FILE: C:\Users\Aleksandr\Desktop\subjects\VS_Code_Go\life_forge\go.sum
+==================================================
+cloud.google.com/go/auth v0.18.1 h1:IwTEx92GFUo2pJ6Qea0EU3zYvKnTAeRCODxfA/G5UWs=
+cloud.google.com/go/auth v0.18.1/go.mod h1:GfTYoS9G3CWpRA3Va9doKN9mjPGRS+v41jmZAhBzbrA=
+cloud.google.com/go/auth/oauth2adapt v0.2.8 h1:keo8NaayQZ6wimpNSmW5OPc283g65QNIiLpZnkHRbnc=
+cloud.google.com/go/auth/oauth2adapt v0.2.8/go.mod h1:XQ9y31RkqZCcwJWNSx2Xvric3RrU88hAYYbjDWYDL+c=
+cloud.google.com/go/compute/metadata v0.9.0 h1:pDUj4QMoPejqq20dK0Pg2N4yG9zIkYGdBtwLoEkH9Zs=
+cloud.google.com/go/compute/metadata v0.9.0/go.mod h1:E0bWwX5wTnLPedCKqk3pJmVgCBSM6qQI1yTBdEb3C10=
+github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
+github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
+github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
+github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2Wg=
+github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
+github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
+github.com/go-logr/logr v1.4.3 h1:CjnDlHq8ikf6E492q6eKboGOC0T8CDaOvkHCIg8idEI=
+github.com/go-logr/logr v1.4.3/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
+github.com/go-logr/stdr v1.2.2 h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=
+github.com/go-logr/stdr v1.2.2/go.mod h1:mMo/vtBO5dYbehREoey6XUKy/eSumjCCveDpRre4VKE=
+github.com/google/s2a-go v0.1.9 h1:LGD7gtMgezd8a/Xak7mEWL0PjoTQFvpRudN895yqKW0=
+github.com/google/s2a-go v0.1.9/go.mod h1:YA0Ei2ZQL3acow2O62kdp9UlnvMmU7kA6Eutn0dXayM=
+github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
+github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+github.com/googleapis/enterprise-certificate-proxy v0.3.11 h1:vAe81Msw+8tKUxi2Dqh/NZMz7475yUvmRIkXr4oN2ao=
+github.com/googleapis/enterprise-certificate-proxy v0.3.11/go.mod h1:RFV7MUdlb7AgEq2v7FmMCfeSMCllAzWxFgRdusoGks8=
+github.com/googleapis/gax-go/v2 v2.16.0 h1:iHbQmKLLZrexmb0OSsNGTeSTS0HO4YvFOG8g5E4Zd0Y=
+github.com/googleapis/gax-go/v2 v2.16.0/go.mod h1:o1vfQjjNZn4+dPnRdl/4ZD7S9414Y4xA+a/6Icj6l14=
+github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsIM=
+github.com/jackc/pgpassfile v1.0.0/go.mod h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=
+github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 h1:iCEnooe7UlwOQYpKFhBabPMi4aNAfoODPEFNiAnClxo=
+github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761/go.mod h1:5TJZWKEWniPve33vlWYSoGYefn3gLQRzjfDlhSJ9ZKM=
+github.com/jackc/pgx/v5 v5.8.0 h1:TYPDoleBBme0xGSAX3/+NujXXtpZn9HBONkQC7IEZSo=
+github.com/jackc/pgx/v5 v5.8.0/go.mod h1:QVeDInX2m9VyzvNeiCJVjCkNFqzsNb43204HshNSZKw=
+github.com/jackc/puddle/v2 v2.2.2 h1:PR8nw+E/1w0GLuRFSmiioY6UooMp6KJv0/61nB7icHo=
+github.com/jackc/puddle/v2 v2.2.2/go.mod h1:vriiEXHvEE654aYKXXjOvZM39qJ0q+azkZFrfEOc3H4=
+github.com/joho/godotenv v1.5.1 h1:7eLL/+HRGLY0ldzfGMeQkb7vMd0as4CfYvUVzLqw0N0=
+github.com/joho/godotenv v1.5.1/go.mod h1:f4LDr5Voq0i2e/R5DDNOoa2zzDfwtkZa6DnEwAbqwq4=
+github.com/kelseyhightower/envconfig v1.4.0 h1:Im6hONhd3pLkfDFsbRgu68RDNkGF1r3dvMUtDTo2cv8=
+github.com/kelseyhightower/envconfig v1.4.0/go.mod h1:cccZRl6mQpaq41TPp5QxidR+Sa3axMbJDNb//FQX6Gg=
+github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
+github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
+github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
+github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
+github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
+github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
+github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
+go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
+go.opentelemetry.io/auto/sdk v1.2.1/go.mod h1:KRTj+aOaElaLi+wW1kO/DZRXwkF4C5xPbEe3ZiIhN7Y=
+go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0 h1:F7Jx+6hwnZ41NSFTO5q4LYDtJRXBf2PD0rNBkeB/lus=
+go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0/go.mod h1:UHB22Z8QsdRDrnAtX4PntOl36ajSxcdUMt1sF7Y6E7Q=
+go.opentelemetry.io/otel v1.39.0 h1:8yPrr/S0ND9QEfTfdP9V+SiwT4E0G7Y5MO7p85nis48=
+go.opentelemetry.io/otel v1.39.0/go.mod h1:kLlFTywNWrFyEdH0oj2xK0bFYZtHRYUdv1NklR/tgc8=
+go.opentelemetry.io/otel/metric v1.39.0 h1:d1UzonvEZriVfpNKEVmHXbdf909uGTOQjA0HF0Ls5Q0=
+go.opentelemetry.io/otel/metric v1.39.0/go.mod h1:jrZSWL33sD7bBxg1xjrqyDjnuzTUB0x1nBERXd7Ftcs=
+go.opentelemetry.io/otel/trace v1.39.0 h1:2d2vfpEDmCJ5zVYz7ijaJdOF59xLomrvj7bjt6/qCJI=
+go.opentelemetry.io/otel/trace v1.39.0/go.mod h1:88w4/PnZSazkGzz/w84VHpQafiU4EtqqlVdxWy+rNOA=
+go.uber.org/multierr v1.10.0 h1:S0h4aNzvfcFsC3dRF1jLoaov7oRaKqRGC/pUEJ2yvPQ=
+go.uber.org/multierr v1.10.0/go.mod h1:20+QtiLqy0Nd6FdQB9TLXag12DsQkrbs3htMFfDN80Y=
+go.uber.org/zap v1.28.0 h1:IZzaP1Fv73/T/pBMLk4VutPl36uNC+OSUh3JLG3FIjo=
+go.uber.org/zap v1.28.0/go.mod h1:rDLpOi171uODNm/mxFcuYWxDsqWSAVkFdX4XojSKg/Q=
+golang.org/x/crypto v0.47.0 h1:V6e3FRj+n4dbpw86FJ8Fv7XVOql7TEwpHapKoMJ/GO8=
+golang.org/x/crypto v0.47.0/go.mod h1:ff3Y9VzzKbwSSEzWqJsJVBnWmRwRSHt/6Op5n9bQc4A=
+golang.org/x/net v0.49.0 h1:eeHFmOGUTtaaPSGNmjBKpbng9MulQsJURQUAfUwY++o=
+golang.org/x/net v0.49.0/go.mod h1:/ysNB2EvaqvesRkuLAyjI1ycPZlQHM3q01F02UY/MV8=
+golang.org/x/oauth2 v0.34.0 h1:hqK/t4AKgbqWkdkcAeI8XLmbK+4m4G5YeQRrmiotGlw=
+golang.org/x/oauth2 v0.34.0/go.mod h1:lzm5WQJQwKZ3nwavOZ3IS5Aulzxi68dUSgRHujetwEA=
+golang.org/x/sync v0.17.0 h1:l60nONMj9l5drqw6jlhIELNv9I0A4OFgRsG9k2oT9Ug=
+golang.org/x/sync v0.17.0/go.mod h1:9KTHXmSnoGruLpwFjVSX0lNNA75CykiMECbovNTZqGI=
+golang.org/x/sync v0.19.0 h1:vV+1eWNmZ5geRlYjzm2adRgW2/mcpevXNg50YZtPCE4=
+golang.org/x/sync v0.19.0/go.mod h1:9KTHXmSnoGruLpwFjVSX0lNNA75CykiMECbovNTZqGI=
+golang.org/x/sys v0.40.0 h1:DBZZqJ2Rkml6QMQsZywtnjnnGvHza6BTfYFWY9kjEWQ=
+golang.org/x/sys v0.40.0/go.mod h1:OgkHotnGiDImocRcuBABYBEXf8A9a87e/uXjp9XT3ks=
+golang.org/x/text v0.29.0 h1:1neNs90w9YzJ9BocxfsQNHKuAT4pkghyXc4nhZ6sJvk=
+golang.org/x/text v0.29.0/go.mod h1:7MhJOA9CD2qZyOKYazxdYMF85OwPdEr9jTtBpO7ydH4=
+golang.org/x/text v0.33.0 h1:B3njUFyqtHDUI5jMn1YIr5B0IE2U0qck04r6d4KPAxE=
+golang.org/x/text v0.33.0/go.mod h1:LuMebE6+rBincTi9+xWTY8TztLzKHc/9C1uBCG27+q8=
+google.golang.org/api v0.265.0 h1:FZvfUdI8nfmuNrE34aOWFPmLC+qRBEiNm3JdivTvAAU=
+google.golang.org/api v0.265.0/go.mod h1:uAvfEl3SLUj/7n6k+lJutcswVojHPp2Sp08jWCu8hLY=
+google.golang.org/genproto/googleapis/rpc v0.0.0-20260128011058-8636f8732409 h1:H86B94AW+VfJWDqFeEbBPhEtHzJwJfTbgE2lZa54ZAQ=
+google.golang.org/genproto/googleapis/rpc v0.0.0-20260128011058-8636f8732409/go.mod h1:j9x/tPzZkyxcgEFkiKEEGxfvyumM01BEtsW8xzOahRQ=
+google.golang.org/grpc v1.78.0 h1:K1XZG/yGDJnzMdd/uZHAkVqJE+xIDOcmdSFZkBUicNc=
+google.golang.org/grpc v1.78.0/go.mod h1:I47qjTo4OKbMkjA/aOOwxDIiPSBofUtQUI5EfpWvW7U=
+google.golang.org/protobuf v1.36.11 h1:fV6ZwhNocDyBLK0dj+fg8ektcVegBBuEolpbTQyBNVE=
+google.golang.org/protobuf v1.36.11/go.mod h1:HTf+CrKn2C3g5S8VImy6tdcUvCska2kB7j23XfzDpco=
+gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
+gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+
+
+
