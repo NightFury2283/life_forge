@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,6 +14,7 @@
             background-color: #e5e7eb;
             border: 1px solid #e5e7eb;
         }
+
         .gantt-header {
             background-color: #f9fafb;
             font-weight: 600;
@@ -21,15 +23,17 @@
             padding: 12px 8px;
             font-size: 0.875rem;
         }
+
         .gantt-cell {
             background-color: #ffffff;
             padding: 12px;
             position: relative;
         }
+
         .task-row {
             display: contents;
         }
-        
+
         .task-name {
             background-color: #ffffff;
             padding: 16px;
@@ -53,7 +57,7 @@
             padding-top: 10px;
             padding-bottom: 10px;
         }
-        
+
         .task-bar {
             background: linear-gradient(90deg, #0ea5e9, #3b82f6);
             border-radius: 6px;
@@ -77,7 +81,8 @@
             position: absolute;
             top: 0;
             bottom: 0;
-            left: 250px; /* Start after task name column */
+            left: 250px;
+            /* Start after task name column */
             width: 2px;
             background-color: #ef4444;
             opacity: 0.5;
@@ -90,6 +95,7 @@
                 opacity: 0;
                 transform: scaleX(0);
             }
+
             to {
                 opacity: 1;
                 transform: scaleX(1);
@@ -97,29 +103,39 @@
         }
     </style>
 </head>
+
 <body class="bg-gray-50 min-h-screen p-8 text-gray-800 font-sans">
 
     <div class="max-w-7xl mx-auto">
         <div class="flex justify-between items-center mb-8">
             <div>
-                <h1 class="text-3xl font-bold text-gray-900 bg-clip-text text-transparent bg-gradient-to-r from-teal-600 to-blue-600">
-                    Диаграмма Ганта
+                <h1
+                    class="text-3xl font-bold text-gray-900 bg-clip-text text-transparent bg-gradient-to-r from-teal-600 to-blue-600">
+                    Диаграмма ближайших событий
                 </h1>
                 <p class="text-gray-500 mt-2">Ближайшие задачи на 14 дней</p>
             </div>
             <div class="flex items-center gap-3">
-                <a href="/" class="px-5 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg shadow-sm font-medium hover:bg-gray-50 transition-colors flex items-center shadow-sm">
+                <a href="/"
+                    class="px-5 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-lg shadow-sm font-medium hover:bg-gray-50 transition-colors flex items-center shadow-sm">
                     ◀ На главную
                 </a>
-                <button onclick="fetchGanttData()" class="px-5 py-2.5 bg-emerald-600 text-white border border-emerald-700 rounded-lg shadow-sm font-medium hover:bg-emerald-700 transition-colors flex items-center gap-2 shadow-sm">
+                <a href="/game.html"
+                    class="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg shadow-sm font-medium hover:shadow-md hover:scale-105 transition-all flex items-center gap-2">
+                    🎮 Геймификация
+                </a>
+                <button onclick="fetchGanttData()"
+                    class="px-5 py-2.5 bg-emerald-600 text-white border border-emerald-700 rounded-lg shadow-sm font-medium hover:bg-emerald-700 transition-colors flex items-center gap-2 shadow-sm">
                     🔄 Обновить
                 </button>
             </div>
         </div>
 
-        <div class="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden relative" id="gantt-container">
+        <div class="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden relative"
+            id="gantt-container">
             <!-- Loading state -->
-            <div id="loading" class="absolute inset-0 bg-white/80 z-50 flex items-center justify-center backdrop-blur-sm">
+            <div id="loading"
+                class="absolute inset-0 bg-white/80 z-50 flex items-center justify-center backdrop-blur-sm">
                 <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600"></div>
             </div>
 
@@ -145,7 +161,7 @@
 
         async function fetchGanttData() {
             document.getElementById('loading').style.display = 'flex';
-            
+
             try {
                 const urlParams = new URLSearchParams(window.location.search);
                 const calendars = urlParams.get('calendars');
@@ -155,11 +171,11 @@
                 }
                 const response = await fetch(apiUrl);
                 if (!response.ok) throw new Error('Ошибка сервера');
-                
+
                 const tasks = await response.json() || [];
-                
+
                 // Sort by nearest completion
-                tasks.sort((a,b) => new Date(a.end_time) - new Date(b.end_time));
+                tasks.sort((a, b) => new Date(a.end_time) - new Date(b.end_time));
 
                 renderGantt(tasks);
             } catch (error) {
@@ -179,17 +195,17 @@
 
             // 1. Render Header
             let headerHTML = `<div class="gantt-header text-left pl-6 bg-gray-100 rounded-tl-xl border-b border-gray-200">Задача</div>`;
-            
+
             for (let i = 0; i < DAYS_TO_SHOW; i++) {
                 const colDate = new Date(today);
                 colDate.setDate(today.getDate() + i);
-                
+
                 let dayStr = colDate.getDate();
                 // User asked to show month for today OR if it's the 1st of the month
                 if (i === 0 || colDate.getDate() === 1) {
                     dayStr = `<span class="text-xs text-gray-400 font-medium uppercase tracking-wider block mb-1">${monthNames[colDate.getMonth()]}</span>${dayStr}`;
                 } else {
-                     dayStr = `<span class="text-xs text-transparent block mb-1">-</span>${dayStr}`; // Placeholder to keep height consistent
+                    dayStr = `<span class="text-xs text-transparent block mb-1">-</span>${dayStr}`; // Placeholder to keep height consistent
                 }
 
                 let classes = "gantt-header border-b border-gray-200 border-l border-white/50";
@@ -200,18 +216,18 @@
             chart.innerHTML += headerHTML;
 
             if (tasks.length === 0) {
-                 chart.innerHTML += `<div class="p-8 text-center text-gray-500 font-medium" style="grid-column: 1 / -1;">Нет предстоящих задач</div>`;
-                 return;
+                chart.innerHTML += `<div class="p-8 text-center text-gray-500 font-medium" style="grid-column: 1 / -1;">Нет предстоящих задач</div>`;
+                return;
             }
 
             // 2. Render Tasks
             tasks.forEach((task, index) => {
                 const endDate = normalizeDate(task.end_time);
-                
+
                 // Calulcate difference in days and +1 to include the end date itself
                 const diffTime = endDate.getTime() - today.getTime();
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                
+
                 // Constrain length between 1 and DAYS_TO_SHOW
                 let spanDays = diffDays + 1;
                 if (spanDays <= 0) spanDays = 1; // Minimum width is 1 day
@@ -228,7 +244,7 @@
                                      style="grid-column: 1 / span ${spanDays}; animation-delay: ${index * 0.05}s"
                                      title="${task.name} (до ${endDate.toLocaleDateString()})">
                                      <div class="absolute inset-y-0 right-3 flex items-center text-white/90 text-xs font-medium opacity-0 hover:opacity-100 transition-opacity">
-                                         до ${endDate.getDate()}.${String(endDate.getMonth()+1).padStart(2,'0')}
+                                         до ${endDate.getDate()}.${String(endDate.getMonth() + 1).padStart(2, '0')}
                                      </div>
                                 </div>
                             ` : `<div style="grid-column: 1 / span 1;"></div>`}
@@ -240,4 +256,5 @@
         }
     </script>
 </body>
+
 </html>

@@ -18,7 +18,7 @@ const (
 )
 
 type CalendarHandler struct {
-	calendarStorage *storage.GoogleCalendarStorage
+	CalendarStorage *storage.GoogleCalendarStorage
 }
 
 type GanttTask struct {
@@ -29,7 +29,7 @@ type GanttTask struct {
 }
 
 func NewCalendarHandler(cs *storage.GoogleCalendarStorage) *CalendarHandler {
-	return &CalendarHandler{calendarStorage: cs}
+	return &CalendarHandler{CalendarStorage: cs}
 }
 
 func (cal *CalendarHandler) HandleGanttDiagramm(w http.ResponseWriter, r *http.Request) {
@@ -54,7 +54,7 @@ func (cal *CalendarHandler) HandleGanttDiagramm(w http.ResponseWriter, r *http.R
 		calIDs = strings.Split(cals, ",")
 	}
 
-	eventsArr, err := cal.calendarStorage.ListEvents(r.Context(), timeMin, timeMax, calIDs...)
+	eventsArr, err := cal.CalendarStorage.ListEvents(r.Context(), timeMin, timeMax, calIDs...)
 
 	if err != nil {
 		http.Error(w, "Failed to load user events: "+err.Error(), http.StatusInternalServerError)
@@ -154,7 +154,7 @@ func normalizeToDay(t time.Time) time.Time {
 
 func (cal *CalendarHandler) HandleGetCalendars(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	calendars, err := cal.calendarStorage.GetUserCalendars(r.Context())
+	calendars, err := cal.CalendarStorage.GetUserCalendars(r.Context())
 	if err != nil {
 		http.Error(w, "Failed to load calendars: "+err.Error(), http.StatusInternalServerError)
 		return

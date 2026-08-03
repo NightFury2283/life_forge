@@ -22,10 +22,19 @@ const (
 	whereSaveEvent = "primary"
 )
 
+// GoogleUserInfo - структура для хранения информации о пользователе
+type GoogleUserInfo struct {
+	ID    string `json:"id"`
+	Email string `json:"email"`
+	Name  string `json:"name"`
+}
+
 type GoogleCalendarStorage struct {
-	service *calendar.Service
-	config  *oauth2.Config
-	pool    *pgxpool.Pool
+	service    *calendar.Service
+	config     *oauth2.Config
+	pool       *pgxpool.Pool
+	httpClient *http.Client
+	userInfo   *GoogleUserInfo // Добавляем кэш
 }
 
 func NewGoogleCalendarStorage(pool *pgxpool.Pool) (*GoogleCalendarStorage, error) {
@@ -49,37 +58,108 @@ func NewGoogleCalendarStorage(pool *pgxpool.Pool) (*GoogleCalendarStorage, error
 		return nil, fmt.Errorf("failed to create Calendar service: %w", err)
 	}
 
-	return &GoogleCalendarStorage{service: service, config: config, pool: pool}, nil
+	return &GoogleCalendarStorage{
+		service:    service,
+		config:     config,
+		pool:       pool,
+		httpClient: client,
+	}, nil
 }
 
 func (gcs *GoogleCalendarStorage) IsAuthorized() bool {
-	return gcs.service != nil
+	return gcs.service != nil && gcs.httpClient != nil
 }
 
-// GetAuthURL returns url for login
+// GetAuthURL returns url for login - ДОБАВЛЯЕМ ПРАВИЛЬНЫЕ SCOPES
 func (gcs *GoogleCalendarStorage) GetAuthURL() string {
+	// Переопределяем config с правильными scope
+	gcs.config.Scopes = []string{
+		calendar.CalendarScope,
+		"https://www.googleapis.com/auth/userinfo.email",
+		"https://www.googleapis.com/auth/userinfo.profile",
+	}
+
 	return gcs.config.AuthCodeURL(
 		"state-token",
 		oauth2.AccessTypeOffline,
-		oauth2.SetAuthURLParam("prompt", "consent"), // принудительный запрос согласия
+		oauth2.SetAuthURLParam("prompt", "consent"),
 	)
 }
 
 // ExchangeCode change code from Google on token and save it
 func (gcs *GoogleCalendarStorage) ExchangeCode(code string) error {
-	tok, err := gcs.config.Exchange(context.Background(), code)
+	ctx := context.Background()
+
+	// Убеждаемся что scope правильные
+	gcs.config.Scopes = []string{
+		calendar.CalendarScope,
+		"https://www.googleapis.com/auth/userinfo.email",
+		"https://www.googleapis.com/auth/userinfo.profile",
+	}
+
+	tok, err := gcs.config.Exchange(ctx, code)
 	if err != nil {
 		return fmt.Errorf("unable to retrieve token from web: %w", err)
 	}
 	saveToken("token.json", tok)
 
-	client := gcs.config.Client(context.Background(), tok)
-	service, err := calendar.NewService(context.Background(), option.WithHTTPClient(client))
+	client := gcs.config.Client(ctx, tok)
+	gcs.httpClient = client
+
+	service, err := calendar.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
 		return fmt.Errorf("failed to create service: %w", err)
 	}
 	gcs.service = service
+
+	// Получаем информацию о пользователе
+	userInfo, err := gcs.GetGoogleUserInfo(ctx)
+	if err != nil {
+		log.Printf("Warning: failed to get user info: %v", err)
+	} else if userInfo.ID != "" {
+		log.Printf("✅ User authenticated: ID=%s, Email=%s, Name=%s", userInfo.ID, userInfo.Email, userInfo.Name)
+		gcs.userInfo = userInfo
+	}
+
 	return nil
+}
+
+// GetGoogleUserInfo - получает полную информацию о пользователе
+func (gcs *GoogleCalendarStorage) GetGoogleUserInfo(ctx context.Context) (*GoogleUserInfo, error) {
+	// Проверяем кэш
+	if gcs.userInfo != nil && gcs.userInfo.ID != "" {
+		return gcs.userInfo, nil
+	}
+
+	if gcs.httpClient == nil {
+		return nil, fmt.Errorf("HTTP client not initialized. Please authenticate first.")
+	}
+
+	// Пробуем получить userinfo
+	resp, err := gcs.httpClient.Get("https://www.googleapis.com/oauth2/v2/userinfo")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user info: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var userInfo GoogleUserInfo
+	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
+		return nil, fmt.Errorf("failed to decode user info: %w", err)
+	}
+
+	log.Printf("📧 Got user info: ID=%s, Email=%s, Name=%s", userInfo.ID, userInfo.Email, userInfo.Name)
+
+	gcs.userInfo = &userInfo
+	return &userInfo, nil
+}
+
+// GetGoogleUserID - получает ID текущего пользователя
+func (gcs *GoogleCalendarStorage) GetGoogleUserID(ctx context.Context) (string, error) {
+	info, err := gcs.GetGoogleUserInfo(ctx)
+	if err != nil {
+		return "", err
+	}
+	return info.ID, nil
 }
 
 //==========================================

@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Настройка LifeForge</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .step-completed {
+            animation: pulse 0.5s ease-out;
+        }
+    </style>
+</head>
+
+<body class="bg-gradient-to-br from-indigo-50 via-white to-purple-50 min-h-screen p-6">
+    <div class="max-w-3xl mx-auto">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <div
+                class="w-20 h-20 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z">
+                    </path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+            </div>
+            <h1 class="text-3xl font-bold text-gray-900">Добро пожаловать в LifeForge!</h1>
+            <p class="text-gray-500 mt-2">Настройте подключение к сервисам за 2 минуты</p>
+        </div>
+
+        <!-- Progress -->
+        <div class="bg-white rounded-2xl shadow-lg p-6 mb-6">
+            <div class="flex items-center justify-between mb-4">
+                <span class="text-sm font-medium text-gray-600">Прогресс настройки</span>
+                <span id="progress-percent" class="text-sm font-bold text-purple-600">0%</span>
+            </div>
+            <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div id="progress-bar"
+                    class="h-full bg-gradient-to-r from-purple-500 to-indigo-600 rounded-full transition-all duration-500"
+                    style="width: 0%"></div>
+            </div>
+        </div>
+
+        <!-- Step 1: Google Cloud -->
+        <div id="step1" class="bg-white rounded-2xl shadow-lg p-6 mb-4">
+            <div class="flex items-start gap-4">
+                <div class="flex-shrink-0">
+                    <div
+                        class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold">
+                        1</div>
+                </div>
+                <div class="flex-1">
+                    <h3 class="text-lg font-bold text-gray-900">Google Calendar API</h3>
+                    <p class="text-sm text-gray-500 mb-4">Подключите свой Google аккаунт для работы с календарём</p>
+
+                    <div class="bg-blue-50 rounded-xl p-4 mb-4">
+                        <p class="text-sm text-blue-800 mb-2">📋 Инструкция:</p>
+                        <ol class="text-sm text-blue-700 space-y-1 ml-4">
+                            <li>1. Перейдите в <a href="https://console.cloud.google.com" target="_blank"
+                                    class="underline">Google Cloud Console</a></li>
+                            <li>2. Создайте новый проект или выберите существующий</li>
+                            <li>3. Включите Google Calendar API</li>
+                            <li>4. Создайте OAuth 2.0 Client ID (тип: Desktop app)</li>
+                            <li>5. Добавьте redirect URI: <code
+                                    class="bg-blue-100 px-1 rounded">http://localhost:8080/auth/callback</code></li>
+                            <li>6. Скачайте <code>credentials.json</code> и положите в корень проекта</li>
+                        </ol>
+                    </div>
+
+                    <button id="check-google"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7">
+                            </path>
+                        </svg>
+                        Проверить настройки
+                    </button>
+                    <span id="google-status" class="ml-3 text-sm"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: GigaChat -->
+        <div id="step2" class="bg-white rounded-2xl shadow-lg p-6 mb-4">
+            <div class="flex items-start gap-4">
+                <div class="flex-shrink-0">
+                    <div
+                        class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold">
+                        2</div>
+                </div>
+                <div class="flex-1">
+                    <h3 class="text-lg font-bold text-gray-900">GigaChat API</h3>
+                    <p class="text-sm text-gray-500 mb-4">Подключите нейросеть GigaChat от Сбера</p>
+
+                    <div class="bg-purple-50 rounded-xl p-4 mb-4">
+                        <p class="text-sm text-purple-800 mb-2">📋 Инструкция:</p>
+                        <ol class="text-sm text-purple-700 space-y-1 ml-4">
+                            <li>1. Перейдите в <a href="https://developers.sber.ru/" target="_blank"
+                                    class="underline">Sber Developers</a></li>
+                            <li>2. Зарегистрируйтесь и создайте проект</li>
+                            <li>3. Подключите API "GigaChat"</li>
+                            <li>4. Скопируйте ваш авторизационный ключ (Client Secret)</li>
+                            <li>5. Вставьте его в поле ниже</li>
+                        </ol>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Авторизационный ключ</label>
+                        <input type="password" id="gigachat-key" placeholder="Введите ваш GigaChat API ключ"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                    </div>
+
+                    <button id="check-gigachat"
+                        class="px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-all flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7">
+                            </path>
+                        </svg>
+                        Проверить ключ
+                    </button>
+                    <span id="gigachat-status" class="ml-3 text-sm"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Database -->
+        <div id="step3" class="bg-white rounded-2xl shadow-lg p-6 mb-6">
+            <div class="flex items-start gap-4">
+                <div class="flex-shrink-0">
+                    <div
+                        class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold">
+                        3</div>
+                </div>
+                <div class="flex-1">
+                    <h3 class="text-lg font-bold text-gray-900">База данных PostgreSQL</h3>
+                    <p class="text-sm text-gray-500 mb-4">Настройка подключения к базе данных</p>
+
+                    <div class="grid grid-cols-2 gap-3 mb-4">
+                        <input type="text" id="db-host" placeholder="Хост (localhost)" value="localhost"
+                            class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                        <input type="text" id="db-port" placeholder="Порт (5432)" value="5432"
+                            class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                        <input type="text" id="db-user" placeholder="Пользователь (postgres)" value="postgres"
+                            class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                        <input type="password" id="db-password" placeholder="Пароль"
+                            class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                        <input type="text" id="db-name" placeholder="Имя БД (life_forge)" value="life_forge"
+                            class="px-3 py-2 border border-gray-300 rounded-lg text-sm col-span-2">
+                    </div>
+
+                    <button id="check-db"
+                        class="px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7">
+                            </path>
+                        </svg>
+                        Проверить подключение
+                    </button>
+                    <span id="db-status" class="ml-3 text-sm"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Final Button -->
+        <button id="finish-setup" disabled
+            class="w-full py-3 bg-gray-300 text-gray-500 rounded-xl font-bold transition-all">
+            Завершить настройку
+        </button>
+    </div>
+
+    <script>
+        let steps = {
+            google: false,
+            gigachat: false,
+            db: false
+        };
+
+        // Сохраняем ключ после успешной проверки
+        let savedGigachatKey = '';
+
+        function updateProgress() {
+            const completed = Object.values(steps).filter(v => v === true).length;
+            const percent = (completed / 3) * 100;
+            document.getElementById('progress-bar').style.width = `${percent}%`;
+            document.getElementById('progress-percent').textContent = `${Math.round(percent)}%`;
+
+            const finishBtn = document.getElementById('finish-setup');
+            if (completed === 3) {
+                finishBtn.disabled = false;
+                finishBtn.className = 'w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-bold hover:shadow-lg transition-all';
+                finishBtn.textContent = '🚀 Завершить настройку и продолжить';
+            } else {
+                finishBtn.disabled = true;
+                finishBtn.className = 'w-full py-3 bg-gray-300 text-gray-500 rounded-xl font-bold transition-all';
+            }
+        }
+
+        // Check Google
+        document.getElementById('check-google').addEventListener('click', async () => {
+            const btn = document.getElementById('check-google');
+            const statusSpan = document.getElementById('google-status');
+            btn.disabled = true;
+            statusSpan.innerHTML = '<span class="text-yellow-600">⏳ Проверка...</span>';
+
+            try {
+                const res = await fetch('/api/check-google');
+                const data = await res.json();
+                if (data.ok) {
+                    steps.google = true;
+                    statusSpan.innerHTML = '<span class="text-green-600">✅ Google Calendar настроен!</span>';
+                    document.getElementById('step1').classList.add('border-2', 'border-green-300');
+                    updateProgress();
+
+                    // Автоматически редиректим на авторизацию если нужно
+                    if (!data.authorized) {
+                        window.open('/auth/google', '_blank');
+                    }
+                } else {
+                    statusSpan.innerHTML = '<span class="text-red-600">❌ Не найден credentials.json</span>';
+                }
+            } catch (err) {
+                statusSpan.innerHTML = '<span class="text-red-600">❌ Ошибка проверки</span>';
+            }
+            btn.disabled = false;
+        });
+
+        // Check GigaChat
+        document.getElementById('check-gigachat').addEventListener('click', async () => {
+            const key = document.getElementById('gigachat-key').value;
+            if (!key) {
+                document.getElementById('gigachat-status').innerHTML = '<span class="text-red-600">❌ Введите ключ</span>';
+                return;
+            }
+
+            const btn = document.getElementById('check-gigachat');
+            const statusSpan = document.getElementById('gigachat-status');
+            btn.disabled = true;
+            statusSpan.innerHTML = '<span class="text-yellow-600">⏳ Проверка...</span>';
+
+            try {
+                const res = await fetch('/api/check-gigachat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: key })
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    steps.gigachat = true;
+                    savedGigachatKey = key; // Сохраняем ключ
+                    statusSpan.innerHTML = '<span class="text-green-600">✅ Ключ GigaChat работает!</span>';
+                    document.getElementById('step2').classList.add('border-2', 'border-green-300');
+                    updateProgress();
+                } else {
+                    statusSpan.innerHTML = '<span class="text-red-600">❌ Неверный ключ</span>';
+                }
+            } catch (err) {
+                statusSpan.innerHTML = '<span class="text-red-600">❌ Ошибка проверки</span>';
+            }
+            btn.disabled = false;
+        });
+
+        // Check Database
+        document.getElementById('check-db').addEventListener('click', async () => {
+            const dbConfig = {
+                host: document.getElementById('db-host').value,
+                port: document.getElementById('db-port').value,
+                user: document.getElementById('db-user').value,
+                password: document.getElementById('db-password').value,
+                dbname: document.getElementById('db-name').value
+            };
+
+            const btn = document.getElementById('check-db');
+            const statusSpan = document.getElementById('db-status');
+            btn.disabled = true;
+            statusSpan.innerHTML = '<span class="text-yellow-600">⏳ Проверка...</span>';
+
+            try {
+                const res = await fetch('/api/check-db', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(dbConfig)
+                });
+                const data = await res.json();
+                if (data.ok) {
+                    steps.db = true;
+                    statusSpan.innerHTML = '<span class="text-green-600">✅ База данных подключена!</span>';
+                    document.getElementById('step3').classList.add('border-2', 'border-green-300');
+                    updateProgress();
+                } else {
+                    statusSpan.innerHTML = '<span class="text-red-600">❌ ' + data.error + '</span>';
+                }
+            } catch (err) {
+                statusSpan.innerHTML = '<span class="text-red-600">❌ Ошибка подключения</span>';
+            }
+            btn.disabled = false;
+        });
+
+        // Finish setup
+        document.getElementById('finish-setup').addEventListener('click', async () => {
+            const dbConfig = {
+                host: document.getElementById('db-host').value,
+                port: document.getElementById('db-port').value,
+                user: document.getElementById('db-user').value,
+                password: document.getElementById('db-password').value,
+                dbname: document.getElementById('db-name').value
+            };
+
+            // Используем сохранённый ключ, если он есть, иначе берём из поля
+            let gigachatKey = savedGigachatKey;
+            if (!gigachatKey) {
+                gigachatKey = document.getElementById('gigachat-key').value;
+            }
+
+            const res = await fetch('/api/save-config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ db: dbConfig, gigachat_key: gigachatKey })
+            });
+
+            if (res.ok) {
+                window.location.href = '/';
+            } else {
+                alert('Ошибка сохранения конфигурации');
+            }
+        });
+
+        // Initial check for existing setup
+        async function checkExistingSetup() {
+            try {
+                const res = await fetch('/api/check-setup');
+                const data = await res.json();
+                if (data.setup_complete) {
+                    window.location.href = '/';
+                }
+            } catch (err) {
+                console.log('Setup not configured yet');
+            }
+        }
+        checkExistingSetup();
+    </script>
+</body>
+
+</html>
