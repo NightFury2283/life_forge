@@ -201,7 +201,7 @@ func (router *Router) register(mux *http.ServeMux) {
 		}
 	})
 
-	mux.HandleFunc("/game.html", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/game", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "static/game.html")
 	})
 
