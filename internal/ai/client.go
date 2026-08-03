@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	model = "GigaChat-Max"
+	model = "GigaChat"
 )
 
 type Message struct {
