@@ -7,14 +7,14 @@ export
 export PROJECT_ROOT=$(shell pwd)
 
 env-up:
-	docker compose up -d todoapp-postgres
+	docker compose up -d life-forge-postgres
 env-down:
-	docker compose down todoapp-postgres
+	docker compose down life-forge-postgres
 
 env-cleanup:
 	@read -p "Очистить все volume файлы окружения? Опасно!!! [y/N]: " ans; \
 	if [ "$$ans" = "y" ]; then \
-		docker compose down -v todoapp-postgres && \
+		docker compose down -v life-forge-postgres && \
 		echo "Файлы окружения очищены"; \
 	else \
 		echo "Очистка окружения отменена"; \
@@ -31,7 +31,7 @@ migrate-create:
 		echo "Отсутствует seq (название миграции). Пример seq=init"; \
 		exit 1; \
 	fi; \
-	docker compose run --rm todoapp-postgres-migrate \
+	docker compose run --rm life-forge-postgres-migrate \
 		create \
 		-ext sql \
 		-dir /migrations \
@@ -49,17 +49,17 @@ migrate-action:
 		exit 1; \
 	fi; \
 	echo "Ожидание готовности PostgreSQL..."; \
-	until docker compose exec -T todoapp-postgres pg_isready -U ${POSTGRES_USER}; do \
+	until docker compose exec -T life-forge-postgres pg_isready -U ${POSTGRES_USER}; do \
 		echo "БД ещё не готова, ждём..."; \
 		sleep 2; \
 	done; \
 	echo "Запуск миграций..."; \
-	docker compose run --rm todoapp-postgres-migrate \
+	docker compose run --rm life-forge-postgres-migrate \
 		-path /migrations \
-		-database postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@todoapp-postgres:5432/${POSTGRES_DB}?sslmode=disable \
+		-database postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@life-forge-postgres:5432/${POSTGRES_DB}?sslmode=disable \
 		"$(action)"
 
-todoapp-run:
+life-forge-run:
 	@export LOGGER_FOLDER=${PROJECT_ROOT}/out/logs && \
 	go mod tidy && \
-	go run cmd/todoapp/main.go
+	go run cmd/life_forge/main.go
