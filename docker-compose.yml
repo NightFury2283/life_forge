@@ -8,8 +8,6 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
     volumes:
       - ${PROJECT_ROOT}/out/pgdata:/var/lib/postgresql
-    ports:
-      - "5432:5432"
     restart: always
   
   life-forge-postgres-migrate:
@@ -17,3 +15,10 @@ services:
     container_name: life-forge-env-migrate
     volumes:
       - ${PROJECT_ROOT}/migrations:/migrations
+
+  port-forwarder:
+    image: alpine/socat:1.8.0.3
+    container_name: lifeforge-postgres-port-forwarder
+    command: tcp-listen:5432,fork,reuseaddr tcp-connect:life-forge-postgres:5432
+    ports:
+      - "127.0.0.1:15432:5432"

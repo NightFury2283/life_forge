@@ -2,6 +2,8 @@
 /life-forge
 cmd/life-forge/life-forge
 
+out/
+
 # Environment variables
 .env
 .env.local
