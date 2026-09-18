@@ -4,12 +4,10 @@ DB_URL=${POSTGRES_DSN}
 
 export
 
-export PROJECT_ROOT=$(shell pwd)
-
 env-up:
-	docker compose up -d life-forge-postgres
+	@docker compose up -d life-forge-postgres
 env-down:
-	docker compose down life-forge-postgres
+	@docker compose down life-forge-postgres
 
 env-cleanup:
 	@read -p "Очистить все volume файлы окружения? Опасно!!! [y/N]: " ans; \
@@ -18,6 +16,17 @@ env-cleanup:
 		echo "Файлы окружения очищены"; \
 	else \
 		echo "Очистка окружения отменена"; \
+	fi
+
+env-volume-clean:
+	@read -p "Удалить volume-данные Postgres? Опасно!!! [y/N]: " ans; \
+	if [ "$$ans" = "y" ]; then \
+		docker compose down life-forge-postgres && \
+		rm -rf out/pgdata && \
+		docker volume rm life_forge_life_forge_pgdata 2>/dev/null || true && \
+		echo "Volume-данные Postgres очищены"; \
+	else \
+		echo "Очистка volume отменена"; \
 	fi
 
 env-port-forward:
