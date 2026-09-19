@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"life_forge/internal/models"
+	"github.com/NightFury2283/life_forge/internal/models"
 	"log"
 	"net/http"
 	"os"

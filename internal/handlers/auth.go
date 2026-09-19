@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"life_forge/internal/storage"
+	"github.com/NightFury2283/life_forge/internal/storage"
 	"log"
 	"net/http"
 )

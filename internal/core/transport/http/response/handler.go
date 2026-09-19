@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"go.uber.org/zap"
-	core_logger "life_forge/internal/core/logger"
+	core_logger "github.com/NightFury2283/life_forge/internal/core/logger"
 	"net/http"
 )
 

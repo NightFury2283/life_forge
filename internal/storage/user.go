@@ -3,7 +3,7 @@ package storage
 import (
     "context"
     "fmt"
-    "life_forge/internal/models"
+    "github.com/NightFury2283/life_forge/internal/models"
     "log"
     "github.com/jackc/pgx/v5/pgxpool"
 )

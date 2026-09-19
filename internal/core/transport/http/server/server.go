@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"go.uber.org/zap"
-	core_logger "life_forge/internal/core/logger"
-	core_http_middleware "life_forge/internal/core/transport/http/middleware"
+	core_logger "github.com/NightFury2283/life_forge/internal/core/logger"
+	core_http_middleware "github.com/NightFury2283/life_forge/internal/core/transport/http/middleware"
 	"net/http"
 )
 
@@ -31,7 +31,6 @@ func NewHTTPServer(
 }
 
 // RegisterMux регистрирует произвольный паттерн прямо на mux сервера.
-// Используй для статики, корневого роута и других маршрутов вне /api/vX/.
 func (h *HTTPServer) RegisterMux(pattern string, handler http.Handler) {
 	h.mux.Handle(pattern, handler)
 }

@@ -3,11 +3,12 @@ package core_logger
 import (
 	"context"
 	"fmt"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"os"
 	"path/filepath"
 	"time"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 type Logger struct {
@@ -25,7 +26,7 @@ func FromContext(ctx context.Context) *Logger {
 	return log
 }
 
-func NewLogger(logConfig Config) (*Logger, error) {
+func NewLogger(logConfig LoggerConfig) (*Logger, error) {
 	zapLvl := zap.NewAtomicLevel()
 	if err := zapLvl.UnmarshalText([]byte(logConfig.Level)); err != nil {
 		return nil, fmt.Errorf("error with unmarshaling logger level: %w", err)

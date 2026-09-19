@@ -26,6 +26,7 @@ func NewConfigMust() Config {
 
 	if err != nil {
 		err = fmt.Errorf("get http server config: %w", err)
+		panic(err)
 	}
 
 	return config

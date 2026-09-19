@@ -1,4 +1,4 @@
-module life_forge
+module github.com/NightFury2283/life_forge
 
 go 1.24.5
 

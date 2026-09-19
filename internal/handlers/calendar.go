@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
-	"life_forge/internal/storage"
+	"github.com/NightFury2283/life_forge/internal/storage"
 	"log"
 	"net/http"
 	"strings"
