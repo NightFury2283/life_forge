@@ -70,5 +70,8 @@ migrate-action:
 
 life-forge-run:
 	@export LOGGER_FOLDER=${PROJECT_ROOT}/out/logs && \
-	go mod tidy && \
 	go run cmd/life_forge/main.go
+
+life-forge-tidy:
+	@export LOGGER_FOLDER=${PROJECT_ROOT}/out/logs && \
+	go mod tidy

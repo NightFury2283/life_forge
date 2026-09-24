@@ -16,5 +16,4 @@ type UserProgress struct {
 	XP             int
 	XPForNextLevel int
 	Coins 		   int
-	UpdatedAt      time.Time
 }
