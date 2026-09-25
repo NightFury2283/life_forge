@@ -102,14 +102,14 @@ func Auth(tokenService *core_auth_jwt.TokenService) Middleware {
 			// 1. Читаем токен
 			cookie, err := r.Cookie("jwt_token")
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusUnauthorized)
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
 
 			// 2. Расшифровываем токен и достаем userID
 			userID, err := tokenService.ParseToken(cookie.Value)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusUnauthorized)
+				http.Error(w, "invalid token", http.StatusUnauthorized)
 				return
 			}
 

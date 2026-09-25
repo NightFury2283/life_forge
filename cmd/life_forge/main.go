@@ -81,7 +81,14 @@ func main() {
 	usersService := users_service.NewUsersService(usersRepositroy)
 
 	usersTransportHTTP := users_transport_http.NewUsersHTTPHandler(usersService)
-	apiVersionRouter.RegisterRoutes(usersTransportHTTP.Routes()...)
+
+	apiVersionRouter.RegisterGroup(core_http_server.RouteGroup{
+		Middleware: []core_http_middleware.Middleware{
+			core_http_middleware.Auth(tokenService),
+		},
+		Routes: usersTransportHTTP.Routes(),
+	})
+
 
 	//-----------------
 
@@ -93,7 +100,10 @@ func main() {
 	}
 	authService := auth_service.NewAuthService(googleProvider, usersRepositroy, tokenService)
 	authTransportHTTP := auth_transport_http.NewAuthHTTPHandler(authService)
-	apiVersionRouter.RegisterRoutes(authTransportHTTP.Routes()...)
+
+	apiVersionRouter.RegisterGroup(core_http_server.RouteGroup{
+		Routes: authTransportHTTP.Routes(),
+	})
 
 	//--------------------
 
@@ -102,7 +112,6 @@ func main() {
 		core_http_server.NewConfigMust(),
 		logger,
 		core_http_middleware.RequestID(),
-		core_http_middleware.Auth(tokenService),
 		core_http_middleware.Logger(logger),
 		core_http_middleware.Panic(),
 		core_http_middleware.Trace(),

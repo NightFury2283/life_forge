@@ -20,8 +20,8 @@ func (repo *UsersRepository) GetOrCreateUserByGoogleID(
 		INSERT INTO lifeforge.users (google_id, email, name)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (google_id) DO UPDATE
-		SET COALESCE(EXCLUDED.email, lifeforge.users.email),
-		    COALESCE(EXCLUDED.name, lifeforge.users.name)
+		SET email = COALESCE(EXCLUDED.email, lifeforge.users.email),
+    		name  = COALESCE(EXCLUDED.name,  lifeforge.users.name)
 		RETURNING id, google_id, email, name, created_at`
 
 	err := repo.pool.QueryRow(ctx, query, googleID, email, name).Scan(
