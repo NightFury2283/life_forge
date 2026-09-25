@@ -12,7 +12,7 @@ env-down:
 env-cleanup:
 	@read -p "Очистить все volume файлы окружения? Опасно!!! [y/N]: " ans; \
 	if [ "$$ans" = "y" ]; then \
-		docker compose down -v life-forge-postgres && \
+		docker compose down -v life-forge-postgres port-forwarder && \
 		echo "Файлы окружения очищены"; \
 	else \
 		echo "Очистка окружения отменена"; \
@@ -70,6 +70,7 @@ migrate-action:
 
 life-forge-run:
 	@export LOGGER_FOLDER=${PROJECT_ROOT}/out/logs && \
+	export POSTGRES_HOST=localhost && \
 	go run cmd/life_forge/main.go
 
 life-forge-tidy:

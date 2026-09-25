@@ -14,7 +14,10 @@ type UsersHTTPHandler struct {
 
 // интерфейс описывает то, что нужно хэндлеру от бизнес-логики
 type UsersService interface {
-	GetProfile(ctx context.Context, userID int) (*domain.UserProgress, error)
+	GetProfile(
+		ctx context.Context,
+		userID int,
+	) (*domain.UserProgress, error)
 }
 
 func NewUsersHTTPHandler(usersService UsersService) *UsersHTTPHandler {
