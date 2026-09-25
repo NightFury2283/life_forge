@@ -7,10 +7,14 @@ import (
 	"os/signal"
 	"syscall"
 
+	core_auth_jwt "github.com/NightFury2283/life_forge/internal/core/auth/jwt"
 	core_logger "github.com/NightFury2283/life_forge/internal/core/logger"
 	core_postgres_pool "github.com/NightFury2283/life_forge/internal/core/repository/postgres/pool"
 	core_http_middleware "github.com/NightFury2283/life_forge/internal/core/transport/http/middleware"
 	core_http_server "github.com/NightFury2283/life_forge/internal/core/transport/http/server"
+	auth_repository_google "github.com/NightFury2283/life_forge/internal/features/auth/repository/google"
+	auth_service "github.com/NightFury2283/life_forge/internal/features/auth/service"
+	auth_transport_http "github.com/NightFury2283/life_forge/internal/features/auth/transport/google/http"
 	users_postgres_repository "github.com/NightFury2283/life_forge/internal/features/users/repository/postgres"
 	users_service "github.com/NightFury2283/life_forge/internal/features/users/service"
 	users_transport_http "github.com/NightFury2283/life_forge/internal/features/users/transport/http"
@@ -41,6 +45,8 @@ func main() {
 	)
 	defer cancel()
 
+	//cfg := config.NewConfigMust()
+
 	logger, err := core_logger.NewLogger(core_logger.NewConfigMust())
 	if err != nil {
 		fmt.Println("Failed to init application logger:", err)
@@ -60,26 +66,48 @@ func main() {
 	}
 	defer pool.Close()
 
+	apiVersionRouter := core_http_server.NewAPIVersionRouter(core_http_server.ApiVersion1)
+
+	//------------------------------
+
+	jwtConfig := core_auth_jwt.NewConfigMust()
+	tokenService := core_auth_jwt.NewTokenService(jwtConfig)
+
+	//------------------------------------------
+
 	logger.Debug("initializing feature", zap.String("feature", "users"))
 
 	usersRepositroy := users_postgres_repository.NewUsersRepository(pool)
 	usersService := users_service.NewUsersService(usersRepositroy)
 
 	usersTransportHTTP := users_transport_http.NewUsersHTTPHandler(usersService)
+	apiVersionRouter.RegisterRoutes(usersTransportHTTP.Routes()...)
+
+	//-----------------
+
+	logger.Debug("initializing feature", zap.String("feature", "auth"))
+
+	googleProvider, err := auth_repository_google.NewGoogleAuthProvider("credentials.json")
+	if err != nil {
+		logger.Fatal("init google auth provider: %w", zap.Error(err))
+	}
+	authService := auth_service.NewAuthService(googleProvider, usersRepositroy, tokenService)
+	authTransportHTTP := auth_transport_http.NewAuthHTTPHandler(authService)
+	apiVersionRouter.RegisterRoutes(authTransportHTTP.Routes()...)
+
+	//--------------------
 
 	logger.Debug("initializing HTTP server")
 	httpServer := core_http_server.NewHTTPServer(
 		core_http_server.NewConfigMust(),
 		logger,
 		core_http_middleware.RequestID(),
-		core_http_middleware.Auth(),
+		core_http_middleware.Auth(tokenService),
 		core_http_middleware.Logger(logger),
 		core_http_middleware.Panic(),
 		core_http_middleware.Trace(),
 	)
 
-	apiVersionRouter := core_http_server.NewAPIVersionRouter(core_http_server.ApiVersion1)
-	apiVersionRouter.RegisterRoutes(usersTransportHTTP.Routes()...)
 	httpServer.RegisterAPIRouters(apiVersionRouter)
 
 	if err := httpServer.Run(ctx); err != nil {

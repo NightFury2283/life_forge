@@ -22,12 +22,7 @@ const (
 	whereSaveEvent = "primary"
 )
 
-// GoogleUserInfo - структура для хранения информации о пользователе
-type GoogleUserInfo struct {
-	ID    string `json:"id"`
-	Email string `json:"email"`
-	Name  string `json:"name"`
-}
+
 
 type GoogleCalendarStorage struct {
 	service    *calendar.Service
@@ -70,97 +65,9 @@ func (gcs *GoogleCalendarStorage) IsAuthorized() bool {
 	return gcs.service != nil && gcs.httpClient != nil
 }
 
-// GetAuthURL returns url for login - ДОБАВЛЯЕМ ПРАВИЛЬНЫЕ SCOPES
-func (gcs *GoogleCalendarStorage) GetAuthURL() string {
-	// Переопределяем config с правильными scope
-	gcs.config.Scopes = []string{
-		calendar.CalendarScope,
-		"https://www.googleapis.com/auth/userinfo.email",
-		"https://www.googleapis.com/auth/userinfo.profile",
-	}
 
-	return gcs.config.AuthCodeURL(
-		"state-token",
-		oauth2.AccessTypeOffline,
-		oauth2.SetAuthURLParam("prompt", "consent"),
-	)
-}
 
-// ExchangeCode change code from Google on token and save it
-func (gcs *GoogleCalendarStorage) ExchangeCode(code string) error {
-	ctx := context.Background()
 
-	// Убеждаемся что scope правильные
-	gcs.config.Scopes = []string{
-		calendar.CalendarScope,
-		"https://www.googleapis.com/auth/userinfo.email",
-		"https://www.googleapis.com/auth/userinfo.profile",
-	}
-
-	tok, err := gcs.config.Exchange(ctx, code)
-	if err != nil {
-		return fmt.Errorf("unable to retrieve token from web: %w", err)
-	}
-	saveToken("token.json", tok)
-
-	client := gcs.config.Client(ctx, tok)
-	gcs.httpClient = client
-
-	service, err := calendar.NewService(ctx, option.WithHTTPClient(client))
-	if err != nil {
-		return fmt.Errorf("failed to create service: %w", err)
-	}
-	gcs.service = service
-
-	// Получаем информацию о пользователе
-	userInfo, err := gcs.GetGoogleUserInfo(ctx)
-	if err != nil {
-		log.Printf("Warning: failed to get user info: %v", err)
-	} else if userInfo.ID != "" {
-		log.Printf("✅ User authenticated: ID=%s, Email=%s, Name=%s", userInfo.ID, userInfo.Email, userInfo.Name)
-		gcs.userInfo = userInfo
-	}
-
-	return nil
-}
-
-// GetGoogleUserInfo - получает полную информацию о пользователе
-func (gcs *GoogleCalendarStorage) GetGoogleUserInfo(ctx context.Context) (*GoogleUserInfo, error) {
-	// Проверяем кэш
-	if gcs.userInfo != nil && gcs.userInfo.ID != "" {
-		return gcs.userInfo, nil
-	}
-
-	if gcs.httpClient == nil {
-		return nil, fmt.Errorf("HTTP client not initialized. Please authenticate first.")
-	}
-
-	// Пробуем получить userinfo
-	resp, err := gcs.httpClient.Get("https://www.googleapis.com/oauth2/v2/userinfo")
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user info: %w", err)
-	}
-	defer resp.Body.Close()
-
-	var userInfo GoogleUserInfo
-	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
-		return nil, fmt.Errorf("failed to decode user info: %w", err)
-	}
-
-	log.Printf("📧 Got user info: ID=%s, Email=%s, Name=%s", userInfo.ID, userInfo.Email, userInfo.Name)
-
-	gcs.userInfo = &userInfo
-	return &userInfo, nil
-}
-
-// GetGoogleUserID - получает ID текущего пользователя
-func (gcs *GoogleCalendarStorage) GetGoogleUserID(ctx context.Context) (string, error) {
-	info, err := gcs.GetGoogleUserInfo(ctx)
-	if err != nil {
-		return "", err
-	}
-	return info.ID, nil
-}
 
 //==========================================
 
@@ -184,56 +91,9 @@ func tokenFromFile(file string) (*oauth2.Token, error) {
 	return tok, err
 }
 
-func saveToken(path string, token *oauth2.Token) {
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
-	if err != nil {
-		log.Printf("Unable to cache oauth token: %v", err)
-		return
-	}
-	defer f.Close()
-	json.NewEncoder(f).Encode(token)
-}
 
-func (gcs *GoogleCalendarStorage) CreateEvent(ctx context.Context, event models.EventRequest) (*calendar.Event, error) {
-	if event.StartTime == nil {
-		log.Println("start time is required")
-	}
 
-	startTime := *event.StartTime
-	var endTime time.Time
 
-	if event.DurationHours != nil {
-		endTime = startTime.Add(time.Duration(*event.DurationHours * float64(time.Hour)))
-	} else {
-		endTime = startTime.Add(time.Hour)
-	}
-
-	googleEvent := &calendar.Event{
-		Summary: event.Title,
-		Start: &calendar.EventDateTime{
-			DateTime: startTime.Format(time.RFC3339),
-			TimeZone: "Europe/Moscow",
-		},
-		End: &calendar.EventDateTime{
-			DateTime: endTime.Format(time.RFC3339),
-			TimeZone: "Europe/Moscow",
-		},
-	}
-
-	if event.Recurrence != nil && *event.Recurrence != "" {
-		recurrenceRule := formatRecurrenceRule(*event.Recurrence)
-		if recurrenceRule != "" {
-			googleEvent.Recurrence = []string{recurrenceRule}
-			log.Printf("📅 Устанавливаем рекуррентность: %s", recurrenceRule)
-		}
-	}
-
-	if event.Description != nil {
-		googleEvent.Description = *event.Description
-	}
-
-	return gcs.service.Events.Insert("primary", googleEvent).Context(ctx).Do()
-}
 
 func formatRecurrenceRule(recurrence string) string {
 	switch strings.ToUpper(recurrence) {
@@ -277,72 +137,8 @@ func (gcs *GoogleCalendarStorage) SaveEventInDB(ctx context.Context, event *mode
 	return nil
 }
 
-func (gcs *GoogleCalendarStorage) ListEvents(ctx context.Context, timeMin, timeMax time.Time, calendarIDs ...string) ([]*calendar.Event, error) {
-	if gcs.service == nil {
-		return nil, fmt.Errorf("Календарь не подключен. Перейдите по /auth/google для авторизации.")
-	}
-	timeMinStr := timeMin.Format(time.RFC3339)
-	timeMaxStr := timeMax.Format(time.RFC3339)
 
-	if len(calendarIDs) == 0 {
-		calendarIDs = []string{"primary"}
-	}
 
-	var allEvents []*calendar.Event
 
-	for _, cid := range calendarIDs {
-		events, err := gcs.service.Events.List(cid).
-			TimeMin(timeMinStr).
-			TimeMax(timeMaxStr).
-			SingleEvents(true).
-			OrderBy("startTime").
-			Context(ctx).
-			Do()
 
-		if err != nil {
-			log.Printf("failed to list events for %s: %v", cid, err)
-			continue
-		}
-		allEvents = append(allEvents, events.Items...)
-	}
 
-	return allEvents, nil
-}
-
-// GetUserCalendars returns user's calendar list
-func (gcs *GoogleCalendarStorage) GetUserCalendars(ctx context.Context) ([]*calendar.CalendarListEntry, error) {
-	if gcs.service == nil {
-		return nil, fmt.Errorf("Календарь не авторизован")
-	}
-	list, err := gcs.service.CalendarList.List().Context(ctx).Do()
-	if err != nil {
-		return nil, err
-	}
-	return list.Items, nil
-}
-
-func (gcs *GoogleCalendarStorage) GetCalendarPreview(ctx context.Context, days int) string {
-	timeMin := time.Now().UTC()
-	timeMax := time.Now().AddDate(0, 0, days).UTC()
-	events, err := gcs.ListEvents(ctx, timeMin, timeMax)
-	if err != nil {
-		return fmt.Sprintf("Error to load calendar: %v", err)
-	}
-
-	if len(events) == 0 {
-		return "No events"
-	}
-
-	var preview strings.Builder
-	preview.WriteString("Closest events:\n")
-
-	for _, event := range events {
-		start := event.Start.DateTime
-		if start == "" {
-			start = event.Start.Date
-		}
-		preview.WriteString(fmt.Sprintf("- %s: %s\n", start, event.Summary))
-	}
-
-	return preview.String()
-}

@@ -16,48 +16,7 @@ func NewUserStorage(pool *pgxpool.Pool) *UserStorage {
     return &UserStorage{pool: pool}
 }
 
-//получаем или создаём пользователя
-func (s *UserStorage) GetOrCreateUserByGoogleID(ctx context.Context, googleID, email, name string) (*models.User, error) {
-    var user models.User
-    
-    // Пытаемся найти существующего
-    query := `SELECT id, google_id, email, name, created_at FROM users WHERE google_id = $1`
-    err := s.pool.QueryRow(ctx, query, googleID).Scan(
-        &user.ID, &user.GoogleID, &user.Email, &user.Name, &user.CreatedAt,
-    )
-    
-    if err == nil {
-        // Пользователь найден, обновляем данные если изменились
-        if email != "" && email != user.Email {
-            updateQuery := `UPDATE users SET email = $1, name = $2 WHERE id = $3`
-            s.pool.Exec(ctx, updateQuery, email, name, user.ID)
-            user.Email = email
-            user.Name = name
-        }
-        return &user, nil
-    }
-    
-    // Создаём нового пользователя
-    insertQuery := `INSERT INTO users (google_id, email, name) VALUES ($1, $2, $3) RETURNING id, created_at`
-    err = s.pool.QueryRow(ctx, insertQuery, googleID, email, name).Scan(&user.ID, &user.CreatedAt)
-    if err != nil {
-        return nil, fmt.Errorf("failed to create user: %w", err)
-    }
-    
-    user.GoogleID = googleID
-    user.Email = email
-    user.Name = name
-    
-    // Создаём запись прогресса
-    progressQuery := `INSERT INTO user_progress (user_id, level, xp, xp_for_next_level) VALUES ($1, 1, 0, 100)`
-    _, err = s.pool.Exec(ctx, progressQuery, user.ID)
-    if err != nil {
-        log.Printf("Warning: failed to create progress for user %d: %v", user.ID, err)
-    }
-    
-    log.Printf("✅ New user created: %s (ID: %d)", name, user.ID)
-    return &user, nil
-}
+
 
 //получить прогресс пользователя
 func (s *UserStorage) GetProgress(ctx context.Context, userID int) (*models.UserProgress, error) {

@@ -7,4 +7,5 @@ var (
 	ErrInvalidArgument = errors.New("invalid argument")
 	ErrConflict = errors.New("conflict")
 	ErrUnauthorized = errors.New("unauthorized")
+	ErrBadRequest = errors.New("bad request")
 )

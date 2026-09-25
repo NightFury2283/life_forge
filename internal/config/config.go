@@ -1,40 +1,30 @@
 package config
 
 import (
-	"github.com/joho/godotenv"
-	"os"
+	"fmt"
+	"github.com/kelseyhightower/envconfig"
 )
 
 type Config struct {
-	PostgresDSN string
-	GigaChatKey string
+	PostgresDSN     string `envconfig:"POSTGRES_DSN" required:"true"`
+	GigaChatAuthKey string `envconfig:"GIGACHAT_AUTH_KEY" required:"true"`
 }
 
-// func New() *Config {
-// 	_ = godotenv.Load()
-
-// 	return &Config{
-// 		PostgresDSN: getEnv("POSTGRES_DSN", "postgres://postgres:12345@localhost:5432/life_forge?sslmode=disable"),
-// 		GigaChatKey: getEnv("GIGACHAT_AUTH_KEY", ""),
-// 	}
-// }
-
-func New() *Config {
-	_ = godotenv.Load()
-
-	dsn := getEnv("POSTGRES_DSN", "")
-	gigachatKey := getEnv("GIGACHAT_AUTH_KEY", "")
-
-	// Если нет настроек, возвращаем пустой конфиг
-	return &Config{
-		PostgresDSN: dsn,
-		GigaChatKey: gigachatKey,
+func NewConfig() (*Config, error) {
+	var config *Config
+	if err := envconfig.Process("", config); err != nil {
+		return nil, fmt.Errorf("process envconfig: %w", err)
 	}
+
+	return config, nil
 }
 
-func getEnv(key, defaultVal string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
+func NewConfigMust() *Config {
+	config, err := NewConfig()
+	if err != nil {
+		err = fmt.Errorf("get config from NewConfig: %w", err)
+		panic(err)
 	}
-	return defaultVal
+
+	return config
 }

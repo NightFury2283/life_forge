@@ -5,10 +5,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/google/uuid"
-	"go.uber.org/zap"
+	core_auth_jwt "github.com/NightFury2283/life_forge/internal/core/auth/jwt"
 	core_logger "github.com/NightFury2283/life_forge/internal/core/logger"
 	core_http_response "github.com/NightFury2283/life_forge/internal/core/transport/http/response"
+	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 const (
@@ -35,7 +36,7 @@ func Logger(log *core_logger.Logger) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			requestID := r.Header.Get(requestIDHeader)
-			
+
 			// при логировании на любом слое автоматически логируем request ID и Url
 			l := log.With(
 				zap.String("request_id", requestID),
@@ -92,19 +93,27 @@ func Trace() Middleware {
 }
 
 type contextKey string
+
 const UserIDKey contextKey = "user_id"
 
-func Auth() Middleware {
+func Auth(tokenService *core_auth_jwt.TokenService) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// 1. Читаем токен (из заголовка Authorization или из Cookie)
-			// token := r.Header.Get("Authorization")
+			// 1. Читаем токен
+			cookie, err := r.Cookie("jwt_token")
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusUnauthorized)
+				return
+			}
 
-			// 2. Расшифровываем токен и достаем userID (пока заглушка)
-			userID := 1
+			// 2. Расшифровываем токен и достаем userID
+			userID, err := tokenService.ParseToken(cookie.Value)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusUnauthorized)
+				return
+			}
 
 			ctx := context.WithValue(r.Context(), UserIDKey, userID)
-
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
