@@ -36,7 +36,7 @@ func NewLogger(logConfig LoggerConfig) (*Logger, error) {
 		return nil, fmt.Errorf("mkdir log folder: %w", err)
 	}
 
-	timestamp := time.Now().UTC().Format("2006-01-02T15-04-05.000000")
+	timestamp := time.Now().Format("2006-01-02T15-04-05.000000")
 
 	logFilePath := filepath.Join(
 		logConfig.Folder,
