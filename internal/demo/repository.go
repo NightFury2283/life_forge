@@ -105,3 +105,24 @@ func cloneStat(stat domain.Stat) domain.Stat {
 	}
 	return stat
 }
+
+func (r *Repository) AdjustStat(ctx context.Context, userID, statID, delta int) (domain.Stat, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.Stat{}, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	stat, ok := r.stats[statID]
+	if !ok || stat.UserID != userID {
+		return domain.Stat{}, core_errors.ErrNotFound
+	}
+	stat.Value += delta
+	if stat.Value < 0 {
+		stat.Value = 0
+	}
+	if stat.Value > 2147483647 {
+		stat.Value = 2147483647
+	}
+	r.stats[statID] = cloneStat(stat)
+	return cloneStat(stat), nil
+}

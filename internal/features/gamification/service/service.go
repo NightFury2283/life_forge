@@ -11,6 +11,7 @@ type GamificationService struct {
 }
 
 type GamificationRepository interface {
+	AdjustStat(context.Context, int, int, int) (domain.Stat, error)
 	ListStats(ctx context.Context, userID int) ([]domain.Stat, error)
 	DeleteStat(ctx context.Context, userID, statID int) error
 	CreateStat(

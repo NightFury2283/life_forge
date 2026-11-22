@@ -41,3 +41,10 @@ func (s *GamificationService) DeleteStat(ctx context.Context, userID, statID int
 	}
 	return nil
 }
+
+func (s *GamificationService) AdjustStat(ctx context.Context, userID, statID, delta int) (domain.Stat, error) {
+	if userID <= 0 || statID <= 0 || (delta != 1 && delta != -1) {
+		return domain.Stat{}, core_errors.ErrInvalidArgument
+	}
+	return s.gamificationRepository.AdjustStat(ctx, userID, statID, delta)
+}

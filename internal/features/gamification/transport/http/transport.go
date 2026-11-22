@@ -13,6 +13,7 @@ type GamificationHTTPHandler struct {
 }
 
 type GamificationService interface {
+	AdjustStat(context.Context, int, int, int) (domain.Stat, error)
 	ListStats(ctx context.Context, userID int) ([]domain.Stat, error)
 	DeleteStat(ctx context.Context, userID, statID int) error
 	CreateStat(
@@ -31,6 +32,7 @@ func NewGamificationHTTPHandler(
 
 func (h *GamificationHTTPHandler) Routes() []core_http_server.Route {
 	return []core_http_server.Route{
+		{Method: http.MethodPatch, Path: "/gamification/stats/{id}", Handler: h.AdjustStat},
 		{Method: http.MethodGet, Path: "/gamification/stats", Handler: h.ListStats},
 		{Method: http.MethodDelete, Path: "/gamification/stats/{id}", Handler: h.DeleteStat},
 		{

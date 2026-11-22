@@ -11,9 +11,14 @@ import (
 )
 
 type repositoryStub struct {
+	adjust func(context.Context, int, int, int) (domain.Stat, error)
 	create func(context.Context, domain.Stat) (domain.Stat, error)
 	list   func(context.Context, int) ([]domain.Stat, error)
 	remove func(context.Context, int, int) error
+}
+
+func (r repositoryStub) AdjustStat(c context.Context, u, id, d int) (domain.Stat, error) {
+	return r.adjust(c, u, id, d)
 }
 
 func (r repositoryStub) CreateStat(ctx context.Context, s domain.Stat) (domain.Stat, error) {

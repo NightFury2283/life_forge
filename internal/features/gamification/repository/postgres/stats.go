@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	core_errors "github.com/NightFury2283/life_forge/internal/core/errors"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/NightFury2283/life_forge/internal/core/domain"
@@ -52,6 +53,17 @@ func (r *GamificationRepository) CreateStat(
 	)
 
 	return statDomain, nil
+}
+
+func (r *GamificationRepository) AdjustStat(ctx context.Context, userID, statID, delta int) (domain.Stat, error) {
+	ctx, cancel := context.WithTimeout(ctx, r.pool.OperationTimeout())
+	defer cancel()
+	var stat domain.Stat
+	err := r.pool.QueryRow(ctx, `UPDATE lifeforge.user_stats SET value=GREATEST(0,LEAST(2147483647,value::bigint+$3)) WHERE id=$1 AND user_id=$2 RETURNING id,user_id,title,description,value`, statID, userID, delta).Scan(&stat.ID, &stat.UserID, &stat.Title, &stat.Description, &stat.Value)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return stat, core_errors.ErrNotFound
+	}
+	return stat, err
 }
 
 func (r *GamificationRepository) ListStats(ctx context.Context, userID int) ([]domain.Stat, error) {

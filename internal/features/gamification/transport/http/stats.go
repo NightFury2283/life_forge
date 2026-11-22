@@ -72,6 +72,29 @@ func statDTOFromDomain(stat domain.Stat) CreateStatResponse {
 	}
 }
 
+func (h *GamificationHTTPHandler) AdjustStat(w http.ResponseWriter, r *http.Request) {
+	response := core_http_response.NewHTTPResponseHanlder(core_logger.FromContext(r.Context()), w)
+	userID, _ := r.Context().Value(core_http_middleware.UserIDKey).(int)
+	statID, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		response.ErrorResponse(core_errors.ErrInvalidArgument, "Неверный навык")
+		return
+	}
+	var body struct {
+		Delta int `json:"delta" validate:"oneof=-1 1"`
+	}
+	if err := core_http_request.DecodeAndValidateRequest(r, &body); err != nil {
+		response.ErrorResponse(err, "Изменяйте навык по одному баллу")
+		return
+	}
+	stat, err := h.gamificationService.AdjustStat(r.Context(), userID, statID, body.Delta)
+	if err != nil {
+		response.ErrorResponse(err, "Не удалось изменить навык")
+		return
+	}
+	response.JSONResponse(statDTOFromDomain(stat), 200)
+}
+
 func (h *GamificationHTTPHandler) ListStats(w http.ResponseWriter, r *http.Request) {
 	response := core_http_response.NewHTTPResponseHanlder(core_logger.FromContext(r.Context()), w)
 	userID, ok := r.Context().Value(core_http_middleware.UserIDKey).(int)
