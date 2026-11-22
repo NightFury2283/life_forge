@@ -11,6 +11,8 @@ import (
 	core_http_server "github.com/NightFury2283/life_forge/internal/core/transport/http/server"
 	auth_service "github.com/NightFury2283/life_forge/internal/features/auth/service"
 	auth_http "github.com/NightFury2283/life_forge/internal/features/auth/transport/google/http"
+	calendar_http "github.com/NightFury2283/life_forge/internal/features/calendar/transport/http"
+	chat_http "github.com/NightFury2283/life_forge/internal/features/chat/transport/http"
 	stats_service "github.com/NightFury2283/life_forge/internal/features/gamification/service"
 	stats_http "github.com/NightFury2283/life_forge/internal/features/gamification/transport/http"
 	users_service "github.com/NightFury2283/life_forge/internal/features/users/service"
@@ -26,6 +28,10 @@ type UserRepository interface {
 type Options struct {
 	Demo          bool
 	SecureCookies bool
+	GoogleTokens  auth_service.GoogleTokenStore
+	Calendar      calendar_http.Service
+	Chat          chat_http.Service
+	Progress      stats_http.ProgressService
 }
 
 func NewHandler(users UserRepository, stats stats_service.GamificationRepository,
@@ -39,11 +45,20 @@ func NewHandler(users UserRepository, stats stats_service.GamificationRepository
 		Middleware: []core_http_middleware.Middleware{core_http_middleware.Auth(tokens)},
 		Routes:     append(profileHandler.Routes(), statsHandler.Routes()...),
 	})
+	if options.Calendar != nil {
+		api.RegisterGroup(core_http_server.RouteGroup{Middleware: []core_http_middleware.Middleware{core_http_middleware.Auth(tokens)}, Routes: calendar_http.New(options.Calendar).Routes()})
+	}
+	if options.Chat != nil {
+		api.RegisterGroup(core_http_server.RouteGroup{Middleware: []core_http_middleware.Middleware{core_http_middleware.Auth(tokens)}, Routes: chat_http.New(options.Chat).Routes()})
+	}
+	if options.Progress != nil {
+		api.RegisterGroup(core_http_server.RouteGroup{Middleware: []core_http_middleware.Middleware{core_http_middleware.Auth(tokens)}, Routes: stats_http.NewProgress(options.Progress).Routes()})
+	}
 	mux.Handle("/api/v1/", http.StripPrefix("/api/v1", api))
 	// Auth endpoints are public; JWT is required only for application data.
 	var authService auth_http.AuthService
 	if provider != nil {
-		authService = auth_service.NewAuthService(provider, users, tokens)
+		authService = auth_service.NewAuthService(provider, users, tokens, options.GoogleTokens)
 	}
 	authHandler := auth_http.NewAuthHTTPHandler(authService, options.SecureCookies)
 	mux.HandleFunc("POST /auth/logout", authHandler.HandleLogout)
@@ -73,10 +88,14 @@ func NewHandler(users UserRepository, stats stats_service.GamificationRepository
 	}
 	mux.HandleFunc("GET /api/status", func(w http.ResponseWriter, r *http.Request) {
 		core_http_response.NewHTTPResponseHanlder(log, w).JSONResponse(map[string]bool{
-			"demo": options.Demo, "google_login": provider != nil,
+			"demo": options.Demo, "google_login": provider != nil, "calendar": options.Calendar != nil, "chat": options.Chat != nil, "progress": options.Progress != nil,
 		}, http.StatusOK)
 	})
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(webassets.Page)
+	})
+	mux.HandleFunc("GET /game", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write(webassets.Page)
 	})

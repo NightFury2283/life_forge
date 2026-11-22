@@ -19,7 +19,12 @@ import (
 	core_http_server "github.com/NightFury2283/life_forge/internal/core/transport/http/server"
 	"github.com/NightFury2283/life_forge/internal/demo"
 	auth_google "github.com/NightFury2283/life_forge/internal/features/auth/repository/google"
+	auth_postgres "github.com/NightFury2283/life_forge/internal/features/auth/repository/postgres"
 	auth_service "github.com/NightFury2283/life_forge/internal/features/auth/service"
+	calendar_google "github.com/NightFury2283/life_forge/internal/features/calendar/repository/google"
+	calendar_service "github.com/NightFury2283/life_forge/internal/features/calendar/service"
+	gigachat "github.com/NightFury2283/life_forge/internal/features/chat/repository/gigachat"
+	chat_service "github.com/NightFury2283/life_forge/internal/features/chat/service"
 	stats_postgres "github.com/NightFury2283/life_forge/internal/features/gamification/repository/postgres"
 	stats_service "github.com/NightFury2283/life_forge/internal/features/gamification/service"
 	users_postgres "github.com/NightFury2283/life_forge/internal/features/users/repository/postgres"
@@ -63,6 +68,7 @@ func run() error {
 	var users app.UserRepository
 	var stats stats_service.GamificationRepository
 	var provider auth_service.GoogleAuthProvider
+	options := app.Options{Demo: *demoMode, SecureCookies: !*demoMode && os.Getenv("COOKIE_SECURE") == "true"}
 	if *demoMode {
 		host, _, err := net.SplitHostPort(*addr)
 		if err != nil || (host != "localhost" && host != "127.0.0.1" && host != "::1") {
@@ -84,13 +90,31 @@ func run() error {
 		}
 		defer pool.Close()
 		users = users_postgres.NewUsersRepository(pool)
-		stats = stats_postgres.NewGamificationRepository(pool)
-		provider, err = auth_google.NewGoogleAuthProvider(envOr("GOOGLE_CREDENTIALS_PATH", "credentials.json"), os.Getenv("GOOGLE_REDIRECT_URL"))
+		statsRepository := stats_postgres.NewGamificationRepository(pool)
+		stats = statsRepository
+		googleProvider, providerErr := auth_google.NewGoogleAuthProvider(envOr("GOOGLE_CREDENTIALS_PATH", "credentials.json"), os.Getenv("GOOGLE_REDIRECT_URL"))
+		provider = googleProvider
+		err = providerErr
 		if err != nil {
 			return err
 		}
+		store, err := auth_postgres.NewTokenStore(pool, secret)
+		if err != nil {
+			return err
+		}
+		options.GoogleTokens = store
+		calendar := calendar_service.New(calendar_google.New(googleProvider, store))
+		options.Calendar = calendar
+		options.Progress = stats_service.NewProgress(statsRepository, calendar)
+		if os.Getenv("GIGACHAT_AUTH_KEY") != "" {
+			model, err := gigachat.New(gigachat.Config{AuthKey: os.Getenv("GIGACHAT_AUTH_KEY"), Model: envOr("GIGACHAT_MODEL", "GigaChat-Pro"), APIURL: os.Getenv("GIGACHAT_API_URL")})
+			if err != nil {
+				return err
+			}
+			options.Chat = chat_service.New(model, calendar)
+		}
 	}
-	handler := app.NewHandler(users, stats, provider, tokens, log, app.Options{Demo: *demoMode, SecureCookies: !*demoMode && os.Getenv("COOKIE_SECURE") == "true"})
+	handler := app.NewHandler(users, stats, provider, tokens, log, options)
 	server := core_http_server.NewHTTPServer(core_http_server.Config{Addr: *addr, ShutdownTimeout: 5 * time.Second}, log)
 	server.RegisterMux("/", handler)
 	log.Info("LifeForge ready", zap.String("address", "http://"+*addr))

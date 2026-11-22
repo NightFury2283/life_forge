@@ -4,13 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	calendar_service "github.com/NightFury2283/life_forge/internal/features/calendar/service"
+	chat_service "github.com/NightFury2283/life_forge/internal/features/chat/service"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/NightFury2283/life_forge/internal/app"
 	tokens "github.com/NightFury2283/life_forge/internal/core/auth/jwt"
@@ -38,13 +42,97 @@ func (googleProvider) GetGoogleUserInfo(_ context.Context, tok *oauth2.Token) (*
 	return &domain.GoogleUserInfo{ID: tok.AccessToken, Name: "Test user", Email: tok.AccessToken + "@example.com"}, nil
 }
 
-func startApp(t *testing.T, demoMode bool) *httptest.Server {
+func startApp(t *testing.T, demoMode bool, extras ...app.Options) *httptest.Server {
 	t.Helper()
 	repo := demo.NewRepository()
 	tokens := tokens.NewTokenService(tokens.JWTConfig{SecretKey: "integration-secret-at-least-thirty-two-bytes"})
-	server := httptest.NewServer(app.NewHandler(repo, repo, googleProvider{}, tokens, &core_logger.Logger{Logger: zap.NewNop()}, app.Options{Demo: demoMode}))
+	options := app.Options{Demo: demoMode}
+	if len(extras) > 0 {
+		options = extras[0]
+		options.Demo = demoMode
+	}
+	server := httptest.NewServer(app.NewHandler(repo, repo, googleProvider{}, tokens, &core_logger.Logger{Logger: zap.NewNop()}, options))
 	t.Cleanup(server.Close)
 	return server
+}
+
+type plannerRepository struct {
+	mu     sync.Mutex
+	events map[int][]domain.CalendarEvent
+	writes int
+}
+
+func (p *plannerRepository) ListCalendars(context.Context, int) ([]domain.Calendar, error) {
+	return []domain.Calendar{{ID: "primary", Summary: "My calendar", Primary: true}}, nil
+}
+func (p *plannerRepository) ListEvents(_ context.Context, id int, _, _ time.Time, _ []string) ([]domain.CalendarEvent, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	result := append([]domain.CalendarEvent{}, p.events[id]...)
+	return result, nil
+}
+func (p *plannerRepository) CreateEvent(_ context.Context, id int, d domain.EventDraft) (domain.CalendarEvent, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.writes++
+	event := domain.CalendarEvent{ID: fmt.Sprint(p.writes), Title: d.Title, Start: d.Start, End: d.Start.Add(time.Duration(d.Duration * float64(time.Hour)))}
+	p.events[id] = append(p.events[id], event)
+	return event, nil
+}
+
+type plannerModel struct{}
+
+func (plannerModel) Generate(context.Context, string) (string, error) {
+	return `Предлагаю прогулку.|||CALENDAR_EVENT|||[{"is_event":true,"title":"Прогулка","start_time":"2026-11-24T18:00:00+03:00","duration":1}]`, nil
+}
+func TestIntegrationPlannerRequiresExplicitConfirmation(t *testing.T) {
+	t.Parallel()
+	repository := &plannerRepository{events: make(map[int][]domain.CalendarEvent)}
+	calendar := calendar_service.New(repository)
+	chat := chat_service.New(plannerModel{}, calendar)
+	server := startApp(t, false, app.Options{Calendar: calendar, Chat: chat})
+	alice, bob := newClient(t), newClient(t)
+	login(t, alice, server.URL, "alice")
+	login(t, bob, server.URL, "bob")
+	call(t, newClient(t), "POST", server.URL+"/api/v1/ai/chat", `{"text":"План"}`, 401)
+	response := call(t, alice, "POST", server.URL+"/api/v1/ai/chat", `{"text":"Прогулка завтра"}`, 200)
+	var reply chat_service.Reply
+	if err := json.NewDecoder(response.Body).Decode(&reply); err != nil {
+		t.Fatal(err)
+	}
+	if len(reply.Drafts) != 1 {
+		t.Fatalf("drafts=%v", reply.Drafts)
+	}
+	repository.mu.Lock()
+	writes := repository.writes
+	repository.mu.Unlock()
+	if writes != 0 {
+		t.Fatal("chat wrote events without confirmation")
+	}
+	draft := reply.Drafts[0]
+	draft.RequestID = "test-confirmation"
+	body, err := json.Marshal(draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call(t, alice, "POST", server.URL+"/api/v1/calendar/events", string(body), 201)
+	window := "?start=2026-11-23T00:00:00Z&end=2026-11-30T00:00:00Z"
+	response = call(t, bob, "GET", server.URL+"/api/v1/calendar/events"+window, "", 200)
+	var events []domain.CalendarEvent
+	if err := json.NewDecoder(response.Body).Decode(&events); err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 0 {
+		t.Fatal("Bob saw Alice's calendar")
+	}
+	response = call(t, alice, "GET", server.URL+"/api/v1/calendar/events"+window, "", 200)
+	if err := json.NewDecoder(response.Body).Decode(&events); err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].Title != "Прогулка" {
+		t.Fatalf("events=%v", events)
+	}
+	call(t, alice, "GET", server.URL+"/api/v1/calendar/events?start=bad", "", 400)
 }
 func newClient(t *testing.T) *http.Client {
 	t.Helper()
