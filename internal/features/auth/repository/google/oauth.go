@@ -20,6 +20,10 @@ type GoogleAuthProvider struct {
 	config *oauth2.Config
 }
 
+func (g *GoogleAuthProvider) TokenSource(ctx context.Context, token *oauth2.Token) oauth2.TokenSource {
+	return g.config.TokenSource(ctx, token)
+}
+
 func NewGoogleAuthProvider(credentialsPath, redirectURL string) (*GoogleAuthProvider, error) {
 	data, err := os.ReadFile(credentialsPath)
 	if err != nil {

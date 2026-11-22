@@ -26,18 +26,24 @@ type AuthService struct {
 	googleProvider GoogleAuthProvider
 	userRepo       UserRepository
 	tokenService   TokenService
+	googleTokens   GoogleTokenStore
 }
 
 func NewAuthService(
 	googleProvider GoogleAuthProvider,
 	userRepo UserRepository,
 	tokenService TokenService,
+	stores ...GoogleTokenStore,
 ) *AuthService {
-	return &AuthService{
+	s := &AuthService{
 		googleProvider: googleProvider,
 		userRepo:       userRepo,
 		tokenService:   tokenService,
 	}
+	if len(stores) > 0 {
+		s.googleTokens = stores[0]
+	}
+	return s
 }
 
 func (s *AuthService) GetGoogleAuthURL(state string) string {
@@ -63,6 +69,11 @@ func (s *AuthService) LoginViaGoogle(ctx context.Context, code string) (string, 
 		return "", fmt.Errorf("get or create user: %w", err)
 	}
 
+	if s.googleTokens != nil {
+		if err := s.googleTokens.SaveGoogleToken(ctx, user.ID, token); err != nil {
+			return "", fmt.Errorf("save Google credentials: %w", err)
+		}
+	}
 	jwtToken, err := s.tokenService.GenerateToken(user.ID)
 	if err != nil {
 		return "", fmt.Errorf("generate jwt: %w", err)
