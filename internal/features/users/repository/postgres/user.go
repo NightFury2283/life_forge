@@ -10,7 +10,7 @@ import (
 func (repo *UsersRepository) GetOrCreateUserByGoogleID(
 	ctx context.Context,
 	googleID, email, name string,
-) (*domain.User, error) {
+) (domain.User, error) {
 	ctx, cancel := context.WithTimeout(ctx, repo.pool.OperationTimeout())
 	defer cancel()
 
@@ -28,10 +28,8 @@ func (repo *UsersRepository) GetOrCreateUserByGoogleID(
 		&user.ID, &user.GoogleID, &user.Email, &user.Name, &user.CreatedAt,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("upsert user: %w", err)
+		return domain.User{}, fmt.Errorf("upsert user: %w", err)
 	}
 
-	//TODO: возможно создавать прогресс, если новый пользователь
-
-	return &user, nil
+	return user, nil
 }

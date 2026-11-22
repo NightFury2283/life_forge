@@ -30,8 +30,8 @@ func (h *HTTPResponseHandler) JSONResponse(
 	responseBody any,
 	statusCode int,
 ) {
-	h.w.WriteHeader(statusCode)
 	h.w.Header().Set("Content-Type", "application/json")
+	h.w.WriteHeader(statusCode)
 
 	if err := json.NewEncoder(h.w).Encode(responseBody); err != nil {
 		h.log.Error("write HTTP response", zap.Error(err))

@@ -1,7 +1,9 @@
 package auth_transport_http
 
 import (
-	"fmt"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"net/http"
 
 	core_errors "github.com/NightFury2283/life_forge/internal/core/errors"
@@ -10,7 +12,15 @@ import (
 )
 
 func (h *AuthHTTPHandler) HandleGoogleLogin(w http.ResponseWriter, r *http.Request) {
-	url := h.authService.GetGoogleAuthURL()
+	stateBytes := make([]byte, 32)
+	if _, err := rand.Read(stateBytes); err != nil {
+		http.Error(w, "cannot initialize login", http.StatusInternalServerError)
+		return
+	}
+	state := hex.EncodeToString(stateBytes)
+	http.SetCookie(w, &http.Cookie{Name: "oauth_state", Value: state, Path: "/", MaxAge: 600,
+		HttpOnly: true, Secure: h.secureCookies, SameSite: http.SameSiteLaxMode})
+	url := h.authService.GetGoogleAuthURL(state)
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
@@ -18,6 +28,15 @@ func (h *AuthHTTPHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Re
 	ctx := r.Context()
 	log := core_logger.FromContext(ctx)
 	responseHandler := core_http_response.NewHTTPResponseHanlder(log, w)
+	w.Header().Set("Cache-Control", "no-store")
+	stateCookie, stateErr := r.Cookie("oauth_state")
+	http.SetCookie(w, &http.Cookie{Name: "oauth_state", Path: "/", MaxAge: -1,
+		HttpOnly: true, Secure: h.secureCookies, SameSite: http.SameSiteLaxMode})
+	state := r.URL.Query().Get("state")
+	if stateErr != nil || state == "" || subtle.ConstantTimeCompare([]byte(state), []byte(stateCookie.Value)) != 1 {
+		responseHandler.ErrorResponse(core_errors.ErrBadRequest, "invalid OAuth state; start login again")
+		return
+	}
 
 	code := r.URL.Query().Get("code")
 	if code == "" {
@@ -35,18 +54,17 @@ func (h *AuthHTTPHandler) HandleGoogleCallback(w http.ResponseWriter, r *http.Re
 		Name:     "jwt_token",
 		Value:    jwtToken,
 		HttpOnly: true,
-		Secure:   false, //TODO поменять на true в проде (с HTTPS)
+		Secure:   h.secureCookies,
 		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 		MaxAge:   24 * 60 * 60, //24 часа
 	})
 
-	//сборка адреса редиректа
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
-	}
-	redirectURL := fmt.Sprintf("%s://%s", scheme, r.Host)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
 
-	http.Redirect(w, r, redirectURL, http.StatusPermanentRedirect)
+func (h *AuthHTTPHandler) HandleLogout(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{Name: "jwt_token", Path: "/", MaxAge: -1,
+		HttpOnly: true, Secure: h.secureCookies, SameSite: http.SameSiteLaxMode})
+	w.WriteHeader(http.StatusNoContent)
 }

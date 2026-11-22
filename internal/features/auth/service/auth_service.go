@@ -9,13 +9,13 @@ import (
 )
 
 type GoogleAuthProvider interface {
-	GetAuthURL() string
+	GetAuthURL(state string) string
 	ExchangeCode(ctx context.Context, code string) (*oauth2.Token, error)
 	GetGoogleUserInfo(ctx context.Context, tok *oauth2.Token) (*domain.GoogleUserInfo, error)
 }
 
 type UserRepository interface {
-	GetOrCreateUserByGoogleID(ctx context.Context, googleID, email, name string) (*domain.User, error)
+	GetOrCreateUserByGoogleID(ctx context.Context, googleID, email, name string) (domain.User, error)
 }
 
 type TokenService interface {
@@ -40,11 +40,14 @@ func NewAuthService(
 	}
 }
 
-func (s *AuthService) GetGoogleAuthURL() string {
-	return s.googleProvider.GetAuthURL()
+func (s *AuthService) GetGoogleAuthURL(state string) string {
+	return s.googleProvider.GetAuthURL(state)
 }
 
 func (s *AuthService) LoginViaGoogle(ctx context.Context, code string) (string, error) {
+	if code == "" {
+		return "", fmt.Errorf("google authorization code is required")
+	}
 	token, err := s.googleProvider.ExchangeCode(ctx, code)
 	if err != nil {
 		return "", fmt.Errorf("exchange google code: %w", err)

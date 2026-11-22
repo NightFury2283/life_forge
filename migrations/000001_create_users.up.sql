@@ -1,4 +1,4 @@
-CREATE SCHEMA lifeforge
+CREATE SCHEMA lifeforge;
 
 CREATE TABLE lifeforge.users (
     id SERIAL PRIMARY KEY,
@@ -35,8 +35,8 @@ CREATE TABLE lifeforge.user_progress (
 CREATE TABLE lifeforge.user_stats (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES lifeforge.users(id) ON DELETE CASCADE,
-    name VARCHAR(100) NOT NULL,
-    description TEXT,
+    title VARCHAR(100) NOT NULL,
+    description TEXT CHECK (description IS NULL OR char_length(description) <= 1000),
     value INTEGER DEFAULT 0 CHECK(value>=0),
-    UNIQUE(user_id, name)
+    UNIQUE(user_id, title)
 );

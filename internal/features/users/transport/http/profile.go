@@ -44,7 +44,7 @@ func (h *UsersHTTPHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	responseHandler.JSONResponse(response, http.StatusOK)
 }
 
-func dtoFromDomain(progress *domain.UserProgress) ProfileResponse {
+func dtoFromDomain(progress domain.UserProgress) ProfileResponse {
 	return ProfileResponse{
 		Level:          progress.Level,
 		XP:             progress.XP,

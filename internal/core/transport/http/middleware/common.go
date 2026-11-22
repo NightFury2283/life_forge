@@ -40,7 +40,7 @@ func Logger(log *core_logger.Logger) Middleware {
 			// при логировании на любом слое автоматически логируем request ID и Url
 			l := log.With(
 				zap.String("request_id", requestID),
-				zap.String("url", r.URL.String()),
+				zap.String("url", r.URL.Path),
 			)
 
 			ctx := context.WithValue(r.Context(), "log", l)

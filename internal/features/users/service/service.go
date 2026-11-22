@@ -14,7 +14,7 @@ type UsersRepository interface {
 	GetProfile(
 		ctx context.Context,
 		userID int,
-	) (*domain.UserProgress, error)
+	) (domain.UserProgress, error)
 }
 
 func NewUsersService(usersRepository UsersRepository) *UsersService {

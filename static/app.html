@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="ru">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>LifeForge · Герой своей жизни</title><link rel="stylesheet" href="/assets/app.css"><script defer src="/assets/app.js"></script></head>
+<body>
+<header><a class="brand" href="/">Life<span>Forge</span><small>ГЕРОЙ СВОЕЙ ЖИЗНИ</small></a><div class="header-right"><span id="mode" class="badge">Загрузка…</span><button id="logout" class="quiet" hidden>Выйти</button></div></header>
+<main>
+<section class="hero"><p class="eyebrow">МАЛЕНЬКИЕ ШАГИ. БОЛЬШИЕ ИЗМЕНЕНИЯ.</p><h1>Прокачивай себя.<br><span>В своём ритме.</span></h1><p>Твои навыки, твой прогресс и немного магии<br>в повседневных делах.</p><div class="hero-art" aria-hidden="true"><div class="orb">✦</div><span>LVL <b id="hero-level">1</b></span></div></section>
+<p id="notice" role="status" hidden></p>
+<section id="login" class="card login" hidden><div><p class="eyebrow">НАЧАЛО ПУТИ</p><h2>Добро пожаловать в LifeForge</h2><p>Войди, чтобы открыть профиль и создать свои характеристики.</p></div><div class="login-actions"><a id="google" class="button" href="/auth/google" hidden>Войти через Google →</a><button id="demo" hidden>Попробовать демо →</button><small id="demo-note" hidden>Локальный деморежим. Данные хранятся в памяти<br>и сбрасываются после перезапуска сервера.</small></div></section>
+<div id="workspace" hidden>
+<section class="summary"><article class="card level-card"><span class="label">ТВОЙ УРОВЕНЬ</span><div class="level"><b id="level">1</b><span>Каждый шаг имеет значение</span></div><div class="progress"><span id="xp-bar"></span></div><small id="xp">0 / 100 XP</small></article><article class="card metric"><span class="label">МОНЕТЫ</span><strong id="coins">0</strong><small>Баланс героя</small></article><article class="card metric"><span class="label">ХАРАКТЕРИСТИКИ</span><strong id="stat-count">0</strong><small>Навыки, которые ты развиваешь</small></article></section>
+<section class="skills"><div><div class="section-heading"><div><p class="eyebrow">ТВОЙ НАБОР СИЛЫ</p><h2>Характеристики</h2></div><button id="refresh" class="quiet">Обновить ↻</button></div><div id="stats" class="stats-list"></div></div><form id="stat-form" class="card"><h3>Новый навык</h3><p>Что ты хочешь развивать?</p><label for="title">Название</label><input id="title" name="title" required maxlength="100" placeholder="Например, дисциплина"><label for="description">Описание <small>необязательно</small></label><textarea id="description" name="description" maxlength="1000" placeholder="Что для тебя значит этот навык?"></textarea><label for="value">Начальное значение</label><input id="value" name="value" type="number" min="0" max="2147483647" value="0" required><button id="create" type="submit">Добавить характеристику +</button></form></section>
+</div>
+<footer><span>✦ LifeForge</span><span>Начни с малого. Продолжай каждый день.</span></footer>
+</main></body></html>

@@ -72,7 +72,7 @@ func NewLogger(logConfig LoggerConfig) (*Logger, error) {
 
 func (l *Logger) Close() {
 	if err := l.file.Close(); err != nil {
-		fmt.Println("failed to close app logger: %w", err)
+		fmt.Println("failed to close app logger:", err)
 	}
 }
 

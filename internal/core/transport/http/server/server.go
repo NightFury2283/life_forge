@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.uber.org/zap"
 	core_logger "github.com/NightFury2283/life_forge/internal/core/logger"
 	core_http_middleware "github.com/NightFury2283/life_forge/internal/core/transport/http/middleware"
+	"go.uber.org/zap"
 	"net/http"
+	"time"
 )
 
 type HTTPServer struct {
@@ -51,8 +52,10 @@ func (h *HTTPServer) Run(ctx context.Context) error {
 	mux := core_http_middleware.ChainMiddleware(h.mux, h.middleware...)
 
 	server := &http.Server{
-		Addr:    h.config.Addr,
-		Handler: mux,
+		Addr:              h.config.Addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	ch := make(chan error, 1)

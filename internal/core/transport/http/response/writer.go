@@ -21,13 +21,23 @@ func NewResponseWriter(w http.ResponseWriter) *ResponseWriter {
 }
 
 func (w *ResponseWriter) WriteHeader(statusCode int) {
+	if w.statusCode != statusCodeUninitialized {
+		return
+	}
 	w.ResponseWriter.WriteHeader(statusCode)
 	w.statusCode = statusCode
 }
 
+func (w *ResponseWriter) Write(p []byte) (int, error) {
+	if w.statusCode == statusCodeUninitialized {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(p)
+}
+
 func (w *ResponseWriter) GetStatusCodeOrPanic() int {
 	if w.statusCode == statusCodeUninitialized {
-		panic("no status code set")
+		return http.StatusOK
 	}
 
 	return w.statusCode

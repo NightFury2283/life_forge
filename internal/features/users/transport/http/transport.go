@@ -17,7 +17,7 @@ type UsersService interface {
 	GetProfile(
 		ctx context.Context,
 		userID int,
-	) (*domain.UserProgress, error)
+	) (domain.UserProgress, error)
 }
 
 func NewUsersHTTPHandler(usersService UsersService) *UsersHTTPHandler {

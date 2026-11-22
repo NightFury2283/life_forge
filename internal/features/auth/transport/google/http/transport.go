@@ -9,23 +9,26 @@ import (
 
 // Сервис авторизации умеет выдавать ссылки и логинить через разных провайдеров
 type AuthService interface {
-	GetGoogleAuthURL() string
+	GetGoogleAuthURL(state string) string
 	LoginViaGoogle(ctx context.Context, code string) (string, error)
 	// в будущем можно подключить другие способы логина
 }
 
 type AuthHTTPHandler struct {
-	authService AuthService
+	authService   AuthService
+	secureCookies bool
 }
 
-func NewAuthHTTPHandler(authService AuthService) *AuthHTTPHandler {
+func NewAuthHTTPHandler(authService AuthService, secureCookies bool) *AuthHTTPHandler {
 	return &AuthHTTPHandler{
-		authService: authService,
+		authService:   authService,
+		secureCookies: secureCookies,
 	}
 }
 
 func (h *AuthHTTPHandler) Routes() []core_http_server.Route {
 	return []core_http_server.Route{
+		{Method: http.MethodPost, Path: "/auth/logout", Handler: h.HandleLogout},
 		{
 			Method:  http.MethodGet,
 			Path:    "/auth/google",

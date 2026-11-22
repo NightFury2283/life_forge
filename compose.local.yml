@@ -1,0 +1,27 @@
+# Isolated local PostgreSQL; does not mount or change the old out/pgdata.
+services:
+  postgres:
+    image: postgres:18.1-bookworm
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lifeforge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lifeforge-local}
+      POSTGRES_DB: ${POSTGRES_DB:-lifeforge}
+    ports:
+      - "127.0.0.1:15432:5432"
+    volumes:
+      - local_pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+  migrate:
+    image: migrate/migrate:v4.19.1
+    volumes:
+      - ./migrations:/migrations:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["-path", "/migrations", "-database", "postgres://${POSTGRES_USER:-lifeforge}:${POSTGRES_PASSWORD:-lifeforge-local}@postgres:5432/${POSTGRES_DB:-lifeforge}?sslmode=disable", "up"]
+volumes:
+  local_pgdata:

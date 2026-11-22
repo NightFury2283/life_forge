@@ -1,5 +1,6 @@
 # Binaries
 /life-forge
+/*.exe
 cmd/life-forge/life-forge
 
 out/
