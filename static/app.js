@@ -1,67 +1,35 @@
 "use strict";
 const $ = id => document.getElementById(id);
-function notice(text) { $("notice").textContent = text; $("notice").hidden = !text; }
-function signedIn(value) { $("workspace").hidden = !value; $("logout").hidden = !value; $("login").hidden = value; }
-async function request(path, options = {}) {
-  const response = await fetch(path, {credentials: "same-origin", ...options});
-  if (response.status === 401) { signedIn(false); throw new Error("Войди в аккаунт, чтобы продолжить."); }
-  if (!response.ok) {
-    const message = response.status === 409 ? "Характеристика с таким названием уже существует." : response.status === 400 ? "Проверь название, описание и начальное значение." : "Не удалось выполнить запрос. Попробуй ещё раз.";
-    throw new Error(message);
-  }
-  return response.status === 204 ? null : response.json();
+let appStatus={},heroProfile=null;
+function notice(text){$("notice").textContent=text;$("notice").hidden=!text;}
+function signedIn(value){$("workspace").hidden=!value;$("logout").hidden=!value;$("login").hidden=value;$("navigation").hidden=!value;$("hero").hidden=value;if(!value)delete document.body.dataset.view;}
+async function request(path,options={}){
+  const response=await fetch(path,{credentials:"same-origin",...options});
+  if(response.status===401){if(!path.includes("/calendar/"))signedIn(false);throw new Error(path.includes("/calendar/")?"Переподключи Google, чтобы увидеть расписание.":"Войди в аккаунт, чтобы продолжить.");}
+  if(!response.ok){const data=await response.json().catch(()=>null);let message=data?.message||"Не удалось выполнить запрос. Попробуй ещё раз.";if(response.status===409)message=path.includes("/stats")?"У тебя уже есть навык с таким названием.":"Эта задача уже выполнена. Обнови прогресс.";if(response.status===400)message="Проверь заполненные поля и даты.";throw new Error(message);}
+  return response.status===204?null:response.json();
 }
-async function refresh() {
-  const [profile, stats] = await Promise.all([request("/api/v1/gamification/profile"), request("/api/v1/gamification/stats")]);
-  signedIn(true);
-  $("level").textContent = $("hero-level").textContent = profile.level;
-  $("coins").textContent = profile.coins;
-  $("xp").textContent = `${profile.xp} / ${profile.xp_for_next_level} XP`;
-  $("xp-bar").style.width = `${Math.min(100, Math.max(0, profile.xp / Math.max(1, profile.xp_for_next_level) * 100))}%`;
-  $("stat-count").textContent = stats.length;
-  $("stats").replaceChildren();
-  if (!stats.length) {
-    const empty = document.createElement("div"); empty.className = "empty";
-    empty.textContent = "Здесь появятся твои характеристики. Добавь первый навык — пусть это станет началом.";
-    $("stats").append(empty);
-  }
-  for (const stat of stats) {
-    const card = document.createElement("article"); card.className = "card stat";
-    const icon = document.createElement("div"); icon.className = "stat-icon"; icon.textContent = "✦"; icon.setAttribute("aria-hidden", "true");
-    const detail = document.createElement("div"); detail.className = "stat-detail";
-    const title = document.createElement("h3"); title.textContent = stat.title; detail.append(title);
-    if (stat.description) { const p = document.createElement("p"); p.textContent = stat.description; detail.append(p); }
-    const value = document.createElement("strong"); value.textContent = stat.value;
-    const remove = document.createElement("button"); remove.className = "delete"; remove.textContent = "×"; remove.setAttribute("aria-label", `Удалить ${stat.title}`);
-    remove.onclick = () => perform(remove, async () => { await request(`/api/v1/gamification/stats/${stat.id}`, {method:"DELETE"}); await refresh(); });
-    card.append(icon, detail, value, remove); $("stats").append(card);
-  }
+function numberTo(el,value){const end=Number(value)||0,from=Number(el.textContent)||0;if(matchMedia("(prefers-reduced-motion: reduce)").matches||from===end){el.textContent=String(end);return;}const start=performance.now();function draw(now){const progress=Math.min(1,(now-start)/450);el.textContent=String(Math.round(from+(end-from)*(1-Math.pow(1-progress,3))));if(progress<1)requestAnimationFrame(draw);}requestAnimationFrame(draw);}
+async function refresh(){
+  const [profile,stats]=await Promise.all([request("/api/v1/gamification/profile"),request("/api/v1/gamification/stats")]);signedIn(true);heroProfile=profile;
+  $("level").textContent=$("hero-level").textContent=profile.level;numberTo($("coins"),profile.coins);
+  const pct=Math.min(100,Math.max(0,profile.xp/Math.max(1,profile.xp_for_next_level)*100));$("xp").textContent=`${profile.xp} / ${profile.xp_for_next_level} XP`;$("xp-bar").style.width=`${pct}%`;$("xp-ring").style.setProperty("--progress",`${pct}%`);$("xp-percent").textContent=`${Math.floor(pct)}%`;$("xp-remaining").textContent=`${Math.max(0,profile.xp_for_next_level-profile.xp)} XP до следующего`;
+  numberTo($("stat-count"),stats.length);$("stats").replaceChildren();
+  if(!stats.length){const empty=document.createElement("div");empty.className="empty";empty.textContent="Твои сильные стороны ещё не записаны. Добавь первый навык — начнём с него.";$("stats").append(empty);}
+  for(const stat of stats){const card=document.createElement("article");card.className="stat";const icon=document.createElement("div");icon.className="stat-icon";icon.textContent=Array.from(stat.title)[0].toUpperCase();icon.setAttribute("aria-hidden","true");const detail=document.createElement("div");detail.className="stat-detail";const title=document.createElement("h3");title.textContent=stat.title;detail.append(title);if(stat.description){const p=document.createElement("p");p.textContent=stat.description;detail.append(p);}const value=document.createElement("strong");value.textContent=stat.value;const remove=document.createElement("button");remove.className="delete";remove.textContent="×";remove.setAttribute("aria-label",`Удалить ${stat.title}`);remove.onclick=()=>perform(remove,async()=>{await request(`/api/v1/gamification/stats/${stat.id}`,{method:"DELETE"});await refresh();});const controls=document.createElement("div");controls.className="stat-adjust";const minus=document.createElement("button"),plus=document.createElement("button");minus.textContent="−";plus.textContent="+";minus.disabled=stat.value<=0;plus.disabled=stat.value>=2147483647;minus.setAttribute("aria-label",`Уменьшить ${stat.title}`);plus.setAttribute("aria-label",`Увеличить ${stat.title}`);for(const [b,delta] of [[minus,-1],[plus,1]])b.onclick=()=>perform(b,async()=>{await request(`/api/v1/gamification/stats/${stat.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({delta})});await refresh();});controls.append(minus,value,plus);card.append(icon,detail,controls,remove);$("stats").append(card);}
 }
-async function perform(button, action) {
-  button.disabled = true; notice("");
-  try { await action(); } catch (err) { notice(err.message); } finally { button.disabled = false; }
+function renderActivity(summary){const map=new Map((summary.activity||[]).map(day=>[day.date,day.count]));const grid=$("activity-grid");grid.replaceChildren();let active=0;for(let i=34;i>=0;i--){const date=new Date(+moscowMidnight()-i*DAY),key=moscowKey(date),count=map.get(key)||0;const cell=document.createElement("div");cell.className="activity-cell";cell.dataset.count=String(Math.min(count,3));cell.title=`${mskDate.format(date)}: выполнено ${count}`;cell.setAttribute("aria-label",cell.title);grid.append(cell);if(count)active++;}$("active-days").textContent=active?`${active} активных дней за последние 35 дней`:"Первый шаг начнёт твою историю";}
+async function loadHero(){
+  if(!appStatus.progress){renderActivity({activity:[]});$("tasks-notice").textContent="Здесь появятся задачи после подключения Google в обычном режиме.";$("hero-tasks").replaceChildren();const empty=document.createElement("div");empty.className="empty";empty.textContent="Выполняй задачи из календаря, получай опыт и монеты. Твой прогресс будет здесь.";$("hero-tasks").append(empty);return;}
+  try{const dashboard=await request("/api/v1/gamification/dashboard");numberTo($("completed-count"),dashboard.summary.completed);numberTo($("earned-xp"),dashboard.summary.earned_xp);renderActivity(dashboard.summary);$("tasks-notice").textContent=dashboard.warning||"Основной Google Calendar · ближайшие 14 дней · МСК";const list=$("hero-tasks");list.replaceChildren();if(!dashboard.tasks.length){const empty=document.createElement("div");empty.className="empty";empty.textContent=dashboard.warning||"В календаре пока нет ближайших задач. Запланируй что-нибудь для себя.";list.append(empty);}
+    for(const task of dashboard.tasks){const row=document.createElement("article");row.className="hero-task"+(task.completed?" done":"");const button=document.createElement("button");button.className="task-check";button.type="button";button.textContent="✓";button.disabled=task.completed;button.setAttribute("aria-label",(task.completed?"Выполнено: ":"Выполнить: ")+task.title);const info=document.createElement("div");info.className="task-info";const title=document.createElement("span");title.className="task-title";title.textContent=task.title||"Без названия";const date=document.createElement("small");date.textContent=task.is_all_day?mskDate.format(new Date(task.start_time))+" · весь день":fullMoscowDate(task.start_time)+" МСК";info.append(title,date);const xp=document.createElement("span");xp.className="task-xp";xp.textContent=task.completed?"Выполнено":"+10 XP";row.append(button,info,xp);button.onclick=()=>perform(button,async()=>{const rect=button.getBoundingClientRect();await request("/api/v1/gamification/tasks/complete",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({event_id:task.id,calendar_id:task.calendar_id})});const floating=document.createElement("span");floating.className="xp-float";floating.textContent="+10 XP";floating.style.left=`${rect.left}px`;floating.style.top=`${rect.top}px`;document.body.append(floating);setTimeout(()=>floating.remove(),1400);await refresh();await loadHero();});list.append(row);}
+  }catch(err){$("tasks-notice").textContent=err.message;}
 }
-$("stat-form").onsubmit = event => {
-  event.preventDefault();
-  perform($("create"), async () => {
-    const description = $("description").value.trim();
-    await request("/api/v1/gamification/stats", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({title:$("title").value.trim(), description:description || null, value:Number($("value").value)})});
-    $("stat-form").reset(); await refresh();
-  });
-};
-$("demo").onclick = () => perform($("demo"), async () => { await request("/auth/demo", {method:"POST"}); await refresh(); });
-$("logout").onclick = () => perform($("logout"), async () => { await request("/auth/logout", {method:"POST"}); signedIn(false); $("stats").replaceChildren(); });
-$("refresh").onclick = () => perform($("refresh"), refresh);
-async function init() {
-  try {
-    const status = await request("/api/status");
-    $("mode").textContent = status.demo ? "ДЕМО · ЛОКАЛЬНО" : "ЛИЧНЫЙ КАБИНЕТ";
-    $("demo").hidden = $("demo-note").hidden = !status.demo;
-    $("google").hidden = !status.google_login;
-    const profile = await fetch("/api/v1/gamification/profile", {credentials:"same-origin"});
-    if (profile.status === 401) { signedIn(false); return; }
-    if (!profile.ok) { throw new Error("Профиль пока недоступен. Попробуй войти заново."); }
-    await refresh();
-  } catch (err) { signedIn(false); notice(err.message); }
-}
+async function perform(button,action){button.disabled=true;notice("");try{await action();}catch(err){notice(err.message);}finally{button.disabled=button.dataset.complete==="true";}}
+$("open-stat").onclick=()=>$("stat-dialog").showModal();$("close-stat").onclick=()=>$("stat-dialog").close();
+$("stat-form").onsubmit=event=>{event.preventDefault();perform($("create"),async()=>{const description=$("description").value.trim();await request("/api/v1/gamification/stats",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:$("title").value.trim(),description:description||null,value:Number($("value").value)})});$("stat-form").reset();$("stat-dialog").close();await refresh();});};
+$("demo").onclick=()=>perform($("demo"),async()=>{await request("/auth/demo",{method:"POST"});await refresh();await loadHero();openView("game");});
+$("logout").onclick=()=>perform($("logout"),async()=>{await request("/auth/logout",{method:"POST"});location.reload();});
+$("refresh").onclick=()=>perform($("refresh"),async()=>{await refresh();await loadHero();});
+async function init(){try{appStatus=await request("/api/status");configurePlanner(appStatus);$("mode").textContent=appStatus.demo?"ДЕМО · ЛОКАЛЬНО":"PERSONAL SPACE";$("demo").hidden=$("demo-note").hidden=!appStatus.demo;$("google").hidden=!appStatus.google_login;renderActivity({activity:[]});const profile=await fetch("/api/v1/gamification/profile",{credentials:"same-origin"});if(profile.status===401){signedIn(false);return;}if(!profile.ok)throw new Error("Профиль пока недоступен. Попробуй войти заново.");await refresh();openView(location.pathname==="/game"||appStatus.demo?"game":"planner");await Promise.allSettled([loadHero(),...(appStatus.calendar?[loadCalendars()]:[])]);}catch(err){signedIn(false);notice(err.message);}}
 init();
