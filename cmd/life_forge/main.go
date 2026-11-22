@@ -2,310 +2,128 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"crypto/rand"
+	"encoding/hex"
+	"flag"
 	"fmt"
-	"life_forge/internal/ai"
-	"life_forge/internal/config"
-	"life_forge/internal/handlers"
-	"life_forge/internal/models"
-	"life_forge/internal/storage"
-	"log"
-	"net/http"
+	"net"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/NightFury2283/life_forge/internal/app"
+	core_auth_jwt "github.com/NightFury2283/life_forge/internal/core/auth/jwt"
+	core_logger "github.com/NightFury2283/life_forge/internal/core/logger"
+	core_postgres_pool "github.com/NightFury2283/life_forge/internal/core/repository/postgres/pool"
+	core_http_server "github.com/NightFury2283/life_forge/internal/core/transport/http/server"
+	"github.com/NightFury2283/life_forge/internal/demo"
+	auth_google "github.com/NightFury2283/life_forge/internal/features/auth/repository/google"
+	auth_postgres "github.com/NightFury2283/life_forge/internal/features/auth/repository/postgres"
+	auth_service "github.com/NightFury2283/life_forge/internal/features/auth/service"
+	calendar_google "github.com/NightFury2283/life_forge/internal/features/calendar/repository/google"
+	calendar_service "github.com/NightFury2283/life_forge/internal/features/calendar/service"
+	gigachat "github.com/NightFury2283/life_forge/internal/features/chat/repository/gigachat"
+	chat_service "github.com/NightFury2283/life_forge/internal/features/chat/service"
+	stats_postgres "github.com/NightFury2283/life_forge/internal/features/gamification/repository/postgres"
+	stats_service "github.com/NightFury2283/life_forge/internal/features/gamification/service"
+	users_postgres "github.com/NightFury2283/life_forge/internal/features/users/repository/postgres"
+	"github.com/joho/godotenv"
+	"go.uber.org/zap"
 )
 
-type Router struct {
-	chatHandler         *handlers.ChatHandler
-	authHandler         *handlers.AuthHandler
-	calendarHandler     *handlers.CalendarHandler
-	gamificationHandler *handlers.GamificationHandler
-}
-
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, HX-Request")
-
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
-
 func main() {
-	cfg := config.New()
-	if cfg.GigaChatKey == "" {
-		log.Fatal("Couldnt find Gigachat key")
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
+}
 
-	//signals
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+func run() error {
+	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("load .env: %w", err)
+	}
+	demoMode := flag.Bool("demo", false, "local demo with volatile storage; no Google or PostgreSQL")
+	addr := flag.String("addr", envOr("HTTP_ADDR", "127.0.0.1:8080"), "HTTP listen address")
+	flag.Parse()
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
-
-	ai_client := ai.NewGigaChatClient(cfg.GigaChatKey)
-
-	pool, err := pgxpool.New(ctx, cfg.PostgresDSN) //пул соединений с БД
+	log, err := core_logger.NewLogger(core_logger.LoggerConfig{Level: envOr("LOGGER_LEVEL", "info"), Folder: envOr("LOGGER_FOLDER", "out/logs")})
 	if err != nil {
-		log.Fatal("unable to connect to bd", err)
+		return err
 	}
-	defer pool.Close()
-
-	if err := pool.Ping(ctx); err != nil {
-		log.Fatal("unable to ping db", err)
-	}
-
-	userStorage := storage.NewUserStorage(pool)
-
-	contextStorage := storage.NewContextStorage(pool)
-
-	calendarStorage, err := storage.NewGoogleCalendarStorage(pool)
-	if err != nil {
-		log.Fatal("Error to connect to Google Calendar", err)
-	}
-	log.Printf("Calendar status: authorized=%v", calendarStorage.IsAuthorized())
-
-	//debug
-	if calendarStorage.IsAuthorized() {
-		events, err := calendarStorage.ListEvents(context.Background(), time.Now().UTC(), time.Now().AddDate(0, 0, 5).UTC())
-		if err != nil {
-			log.Printf("Error listing events: %v", err)
+	defer log.Close()
+	secret := os.Getenv("JWT_SECRET_KEY")
+	if *demoMode {
+		random := make([]byte, 32)
+		if _, err := rand.Read(random); err != nil {
+			return err
 		}
-		log.Printf("📅 Calendar events found: %d", len(events))
+		secret = hex.EncodeToString(random)
+	}
+	if len(secret) < 32 {
+		return fmt.Errorf("JWT_SECRET_KEY must contain at least 32 bytes; configure .env or run with -demo")
+	}
+	tokens := core_auth_jwt.NewTokenService(core_auth_jwt.JWTConfig{SecretKey: secret})
+	var users app.UserRepository
+	var stats stats_service.GamificationRepository
+	var provider auth_service.GoogleAuthProvider
+	options := app.Options{Demo: *demoMode, SecureCookies: !*demoMode && os.Getenv("COOKIE_SECURE") == "true"}
+	if *demoMode {
+		host, _, err := net.SplitHostPort(*addr)
+		if err != nil || (host != "localhost" && host != "127.0.0.1" && host != "::1") {
+			return fmt.Errorf("demo must listen on loopback, e.g. -addr 127.0.0.1:8080")
+		}
+		repository := demo.NewRepository()
+		users, stats = repository, repository
+		log.Warn("DEMO MODE: shared local account; data resets on restart")
 	} else {
-		log.Println("Go by url: 🔗 http://localhost:8080/auth/google")
-	}
-
-	chatHandler := handlers.NewChatHandler(contextStorage, ai_client, calendarStorage)
-	authHandler := handlers.NewAuthHandler(calendarStorage, userStorage)
-	calendarHandler := handlers.NewCalendarHandler(calendarStorage)
-	// Создаём gamification handler
-	gamificationHandler := handlers.NewGamificationHandler(userStorage, calendarStorage)
-
-	mux := http.NewServeMux()
-
-	router := newRouter(chatHandler, authHandler, calendarHandler, gamificationHandler)
-
-	router.register(mux)
-
-	handler := setupMiddleware(corsMiddleware(mux))
-
-	srv := &http.Server{
-		Addr:    ":8080",
-		Handler: handler,
-	}
-
-	log.Println("Server starting on http://localhost:8080")
-	go func() {
-		if err := http.ListenAndServe(":8080", handler); err != nil && err != http.ErrServerClosed {
-			log.Fatal("Fail Listen and Serve with error ", err)
-		}
-	}()
-
-	<-ctx.Done()
-
-	log.Println("Shutting down server...")
-
-	shutdownCtx, stop := context.WithTimeout(context.Background(), 5*time.Second)
-	defer stop()
-
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Println("Server cannot be stoped. error %w", err)
-	}
-}
-
-func initStorageContext(ctx context.Context, storageInstance *storage.ContextStorage) {
-	storageInstance.SaveContext(ctx, &models.Context{
-		ID:       1,
-		Goals:    []string{},
-		Recent5:  []string{},
-		Progress: map[string]string{},
-	})
-}
-
-func newRouter(
-	chatHandler *handlers.ChatHandler,
-	authHandler *handlers.AuthHandler,
-	calendarHandler *handlers.CalendarHandler,
-	gamificationHandler *handlers.GamificationHandler,
-) *Router {
-	return &Router{
-		chatHandler:         chatHandler,
-		authHandler:         authHandler,
-		calendarHandler:     calendarHandler,
-		gamificationHandler: gamificationHandler,
-	}
-}
-
-func (router *Router) register(mux *http.ServeMux) {
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "static/index.html")
-	})
-	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
-
-	mux.HandleFunc("/chat", router.chatHandler.HandleChat)
-	mux.HandleFunc("/auth/google", router.authHandler.HandleGoogleLogin)
-	mux.HandleFunc("/auth/callback", router.authHandler.HandleGoogleCallback)
-	mux.HandleFunc("/api/gantt", router.calendarHandler.HandleGanttDiagramm)
-	mux.HandleFunc("/api/calendars", router.calendarHandler.HandleGetCalendars)
-
-	// Init storage context if needed
-	//initStorageContext(ctx, storage)
-
-	//mux.HandleFunc("/entry", handler.HandleCreateEntry)
-	//mux.HandleFunc("/entries", handler.HandleGetEntries)
-
-	//gamification
-	mux.HandleFunc("/api/profile", router.gamificationHandler.HandleGetProfile)
-	mux.HandleFunc("/api/stats", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPost:
-			router.gamificationHandler.HandleCreateStat(w, r)
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-	mux.HandleFunc("/api/stats/", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPut:
-			router.gamificationHandler.HandleUpdateStat(w, r)
-		case http.MethodDelete:
-			router.gamificationHandler.HandleDeleteStat(w, r)
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-	mux.HandleFunc("/api/tasks", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			router.gamificationHandler.HandleGetTasks(w, r)
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-	mux.HandleFunc("/api/tasks/complete", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPost:
-			router.gamificationHandler.HandleCompleteTask(w, r)
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-
-	mux.HandleFunc("/game", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "static/game.html")
-	})
-
-	mux.HandleFunc("/setup", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "static/setup.html")
-	})
-
-	mux.HandleFunc("/api/check-google", func(w http.ResponseWriter, r *http.Request) {
-		// Проверяем наличие credentials.json
-		_, err := os.Stat("credentials.json")
-		response := map[string]interface{}{
-			"ok":         err == nil,
-			"authorized": router.calendarHandler.CalendarStorage.IsAuthorized(),
-		}
-		json.NewEncoder(w).Encode(response)
-	})
-
-	mux.HandleFunc("/api/check-gigachat", func(w http.ResponseWriter, r *http.Request) {
-		var req struct{ Key string }
-		json.NewDecoder(r.Body).Decode(&req)
-
-		// Проверяем ключ GigaChat (делаем тестовый запрос)
-		client := ai.NewGigaChatClient(req.Key)
-		_, err := client.Generate(r.Context(), "Привет")
-
-		response := map[string]interface{}{"ok": err == nil}
+		config, err := core_postgres_pool.NewConfig()
 		if err != nil {
-			response["error"] = err.Error()
+			return fmt.Errorf("configure PostgreSQL in .env: %w", err)
 		}
-		json.NewEncoder(w).Encode(response)
-	})
-
-	mux.HandleFunc("/api/check-db", func(w http.ResponseWriter, r *http.Request) {
-		var config struct {
-			Host, Port, User, Password, Dbname string
-		}
-		json.NewDecoder(r.Body).Decode(&config)
-
-		dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
-			config.User, config.Password, config.Host, config.Port, config.Dbname)
-
-		pool, err := pgxpool.New(r.Context(), dsn)
-		response := map[string]interface{}{"ok": err == nil}
+		connectCtx, stop := context.WithTimeout(ctx, 10*time.Second)
+		pool, err := core_postgres_pool.NewConnectionPool(connectCtx, config)
+		stop()
 		if err != nil {
-			response["error"] = err.Error()
-		} else {
-			pool.Close()
+			return err
 		}
-		json.NewEncoder(w).Encode(response)
-	})
-
-	mux.HandleFunc("/api/save-config", func(w http.ResponseWriter, r *http.Request) {
-		var cfg struct {
-			DB struct {
-				Host, Port, User, Password, Dbname string
+		defer pool.Close()
+		users = users_postgres.NewUsersRepository(pool)
+		statsRepository := stats_postgres.NewGamificationRepository(pool)
+		stats = statsRepository
+		googleProvider, providerErr := auth_google.NewGoogleAuthProvider(envOr("GOOGLE_CREDENTIALS_PATH", "credentials.json"), os.Getenv("GOOGLE_REDIRECT_URL"))
+		provider = googleProvider
+		err = providerErr
+		if err != nil {
+			return err
+		}
+		store, err := auth_postgres.NewTokenStore(pool, secret)
+		if err != nil {
+			return err
+		}
+		options.GoogleTokens = store
+		calendar := calendar_service.New(calendar_google.New(googleProvider, store))
+		options.Calendar = calendar
+		options.Progress = stats_service.NewProgress(statsRepository, calendar)
+		if os.Getenv("GIGACHAT_AUTH_KEY") != "" {
+			model, err := gigachat.New(gigachat.Config{AuthKey: os.Getenv("GIGACHAT_AUTH_KEY"), Model: envOr("GIGACHAT_MODEL", "GigaChat-Pro"), APIURL: os.Getenv("GIGACHAT_API_URL")})
+			if err != nil {
+				return err
 			}
-			GigachatKey string
+			options.Chat = chat_service.New(model, calendar)
 		}
-		json.NewDecoder(r.Body).Decode(&cfg)
-
-		// Если пришёл пустой ключ, пробуем сохранить старый
-		gigachatKey := cfg.GigachatKey
-		if gigachatKey == "" {
-			// Читаем существующий .env
-			if data, err := os.ReadFile(".env"); err == nil {
-				lines := strings.Split(string(data), "\n")
-				for _, line := range lines {
-					if strings.HasPrefix(line, "GIGACHAT_AUTH_KEY=") {
-						gigachatKey = strings.TrimPrefix(line, "GIGACHAT_AUTH_KEY=")
-						break
-					}
-				}
-			}
-		}
-
-		envContent := fmt.Sprintf(`POSTGRES_DSN=postgres://%s:%s@%s:%s/%s?sslmode=disable
-GIGACHAT_AUTH_KEY=%s`,
-			cfg.DB.User, cfg.DB.Password, cfg.DB.Host, cfg.DB.Port, cfg.DB.Dbname,
-			gigachatKey)
-
-		err := os.WriteFile(".env", []byte(envContent), 0644)
-		if err != nil {
-			http.Error(w, "Failed to save", 500)
-			return
-		}
-
-		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
-	})
+	}
+	handler := app.NewHandler(users, stats, provider, tokens, log, options)
+	server := core_http_server.NewHTTPServer(core_http_server.Config{Addr: *addr, ShutdownTimeout: 5 * time.Second}, log)
+	server.RegisterMux("/", handler)
+	log.Info("LifeForge ready", zap.String("address", "http://"+*addr))
+	return server.Run(ctx)
 }
 
-// Проверка что настройка завершена (редирект на setup если нет)
-func setupMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/setup" || r.URL.Path == "/api/check-setup" {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		// Проверяем есть ли .env
-		if _, err := os.Stat(".env"); os.IsNotExist(err) {
-			http.Redirect(w, r, "/setup", http.StatusFound)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
+func envOr(name, fallback string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
 }
